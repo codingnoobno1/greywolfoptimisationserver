@@ -1,43 +1,65 @@
 import cv2
+import mediapipe as mp
 from ai.mediapipe_engine.model import MediaPipeModel
 
+# Hand connection pairs for drawing
+HAND_CONNECTIONS = [
+    (0, 1), (1, 2), (2, 3), (3, 4),    # Thumb
+    (0, 5), (5, 6), (6, 7), (7, 8),    # Index
+    (0, 9), (9, 10), (10, 11), (11, 12), # Middle
+    (0, 13), (13, 14), (14, 15), (15, 16), # Ring
+    (0, 17), (17, 18), (18, 19), (19, 20), # Pinky
+    (5, 9), (9, 13), (13, 17), (0, 17) # Palm
+]
+
 def run_mediapipe(frame):
-    hands_model, mp_hands, mp_drawing, mp_drawing_styles = MediaPipeModel.get_instance()
+    landmarker = MediaPipeModel.get_instance()
     
-    if not hands_model:
+    if not landmarker:
         return {"annotated_frame": frame, "gestures": []}
 
+    # MP Tasks requires mp.Image
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = hands_model.process(rgb_frame)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+    
+    # Run inference
+    detection_result = landmarker.detect(mp_image)
     
     annotated_frame = frame.copy()
     hands_data = []
     
-    if results.multi_hand_landmarks:
-        for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-            mp_drawing.draw_landmarks(
-                annotated_frame,
-                hand_landmarks,
-                mp_hands.HAND_CONNECTIONS,
-                mp_drawing_styles.get_default_hand_landmarks_style(),
-                mp_drawing_styles.get_default_hand_connections_style()
-            )
+    if detection_result.hand_landmarks:
+        h, w, _ = frame.shape
+        for hand_idx, hand_landmarks in enumerate(detection_result.hand_landmarks):
+            # Draw landmarks and connections manually
+            for connection in HAND_CONNECTIONS:
+                start_idx, end_idx = connection
+                start_lm = hand_landmarks[start_idx]
+                end_lm = hand_landmarks[end_idx]
+                pt1 = (int(start_lm.x * w), int(start_lm.y * h))
+                pt2 = (int(end_lm.x * w), int(end_lm.y * h))
+                cv2.line(annotated_frame, pt1, pt2, (0, 255, 0), 2)
+
+            for lm in hand_landmarks:
+                pt = (int(lm.x * w), int(lm.y * h))
+                cv2.circle(annotated_frame, pt, 5, (255, 0, 0), -1)
             
-            landmarks = [{"x": lm.x, "y": lm.y, "z": lm.z} for lm in hand_landmarks.landmark]
+            # Extract landmarks for gesture logic
+            landmarks = [{"x": lm.x, "y": lm.y, "z": lm.z} for lm in hand_landmarks]
             
+            # Handedness
             handedness = "Unknown"
-            if results.multi_handedness:
-                handedness = results.multi_handedness[hand_idx].classification[0].label
+            if detection_result.handedness:
+                handedness = detection_result.handedness[hand_idx][0].category_name
                 
             # --- Gesture Recognition Logic ---
             def is_finger_open(lm_list, tip_idx, pip_idx):
                 return lm_list[tip_idx].y < lm_list[pip_idx].y
 
-            lms = hand_landmarks.landmark
-            index_open = is_finger_open(lms, 8, 6)
-            middle_open = is_finger_open(lms, 12, 10)
-            ring_open = is_finger_open(lms, 16, 14)
-            pinky_open = is_finger_open(lms, 20, 18)
+            index_open = is_finger_open(hand_landmarks, 8, 6)
+            middle_open = is_finger_open(hand_landmarks, 12, 10)
+            ring_open = is_finger_open(hand_landmarks, 16, 14)
+            pinky_open = is_finger_open(hand_landmarks, 20, 18)
 
             detected_gesture = "None"
             if index_open and not middle_open and not ring_open and not pinky_open:
@@ -49,10 +71,10 @@ def run_mediapipe(frame):
             cv2.putText(
                 annotated_frame, 
                 f"{handedness}: {detected_gesture}", 
-                (10, 30 + (hand_idx * 40)), 
+                (10, 60 + (hand_idx * 40)), 
                 cv2.FONT_HERSHEY_SIMPLEX, 
                 1, 
-                (0, 255, 0), 
+                (0, 255, 255), 
                 2, 
                 cv2.LINE_AA
             )
@@ -64,3 +86,4 @@ def run_mediapipe(frame):
             })
 
     return {"annotated_frame": annotated_frame, "gestures": hands_data}
+

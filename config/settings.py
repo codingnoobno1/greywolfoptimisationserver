@@ -12,7 +12,7 @@ class Settings:
     USE_WEBCAM = os.getenv('USE_WEBCAM', 'false').lower() == 'true'
     
     # Model Settings
-    DEFAULT_ACTIVE_MODE = os.getenv('DEFAULT_ACTIVE_MODE', 'none') # "yolo", "mediapipe", "all", "none"
+    DEFAULT_ACTIVE_MODE = os.getenv('DEFAULT_ACTIVE_MODE', 'all') # "yolo", "mediapipe", "all", "none"
     YOLO_MODEL_PATH = os.getenv('YOLO_MODEL_PATH', 'yolov8n.pt')
     
     # Streaming Settings

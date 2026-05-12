@@ -64,26 +64,32 @@ async def mobile_websocket_ingest(websocket: WebSocket):
     """
     Standardized Mobile Ingestion.
     Protocol: Binary JPEG frames.
-    Metadata: Assumed from connection or prepended (future).
     """
+    logger.info("WS DEBUG: STEP 1 - Received connection request")
     await websocket.accept()
     client_id = f"mobile_{websocket.client.host}"
-    logger.info(f"Mobile standardized connection: {client_id}")
+    logger.info(f"WS DEBUG: STEP 2 - Accepted connection from {client_id}")
     
-    # Auto-engage mobile session source (let the dashboard control the AI mode)
+    # Send immediate ACK for synchronization
+    await websocket.send_json({"status": "connected", "client_id": client_id})
+    
+    # Auto-engage mobile session source
     store.set_input_source("mobile")
+
     
     try:
         while True:
             # 1. Receive binary JPEG
+            logger.debug("WS DEBUG: WAITING for frame...")
             data = await websocket.receive_bytes()
+            logger.debug(f"WS DEBUG: GOT FRAME: {len(data)} bytes")
             
             # 2. Decode
             nparr = np.frombuffer(data, np.uint8)
             frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
             if frame is not None:
-                # 3. Wrap in FramePacket (Standardization)
+                # 3. Wrap in FramePacket
                 packet = FramePacket(
                     frame=frame,
                     source_id=client_id,
@@ -93,7 +99,7 @@ async def mobile_websocket_ingest(websocket: WebSocket):
                 )
                 push_frame(packet)
                 
-                # 4. Standardized Distribution Feedback (Metadata only)
+                # 4. Feedback (Metadata)
                 result = store.get_result()
                 await websocket.send_json({
                     "status": "active",
@@ -102,7 +108,10 @@ async def mobile_websocket_ingest(websocket: WebSocket):
                     "gestures": result.get("gestures", []),
                     "fps": round(result.get("fps", 0.0), 2)
                 })
+            else:
+                logger.warning("WS DEBUG: Failed to decode frame")
     except WebSocketDisconnect:
-        logger.info(f"Mobile disconnected: {client_id}")
+        logger.info(f"WS DEBUG: Mobile disconnected: {client_id}")
     except Exception as e:
-        logger.error(f"Mobile WS Error: {e}")
+        logger.error(f"WS DEBUG: Exception in mobile WS loop: {e}", exc_info=True)
+
