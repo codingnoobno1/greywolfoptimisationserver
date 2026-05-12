@@ -17,6 +17,8 @@ from config.settings import settings
 router = APIRouter()
 relay = MediaRelay()
 
+from av import VideoFrame
+
 class VideoIngestTrack(VideoStreamTrack):
     """
     A video stream track that receives frames from WebRTC 
@@ -45,6 +47,35 @@ class VideoIngestTrack(VideoStreamTrack):
         
         return frame
 
+class VideoProcessedTrack(VideoStreamTrack):
+    """
+    A video stream track that pulls the latest processed frame
+    from the ResultStore and sends it back to the client.
+    """
+    def __init__(self):
+        super().__init__()
+        self.counter = 0
+
+    async def recv(self):
+        # Limit framerate of processed stream to ~20 FPS to save bandwidth/CPU
+        await asyncio.sleep(0.05) 
+        
+        # Get annotated frame from store
+        img = store.get_latest_frame()
+        
+        if img is None:
+            # Send a black placeholder if no frame yet
+            img = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(img, "WAITING FOR AI...", (150, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+        # Convert numpy BGR to aiortc VideoFrame
+        frame = VideoFrame.from_ndarray(img, format="bgr24")
+        frame.pts = self.counter
+        frame.time_base = 1 / 1000  # ms
+        self.counter += 1
+        
+        return frame
+
 @router.post("/offer")
 async def webrtc_offer(request: Request):
     params = await request.json()
@@ -61,13 +92,16 @@ async def webrtc_offer(request: Request):
 
     @pc.on("track")
     def on_track(track):
-        if track.kind == "video":
-            logger.info(f"WebRTC: Received video track from {client_id}")
-            # Set input source to mobile for the dashboard
-            store.set_input_source("mobile")
-            
-            # Wrap the track to ingest frames
-            pc.addTrack(VideoIngestTrack(relay.subscribe(track), client_id))
+      if track.kind == "video":
+        logger.info(f"WebRTC: Received video track from {client_id}")
+        # Set input source to mobile for the dashboard
+        store.set_input_source("mobile")
+        
+        # 1. Ingest incoming stream
+        pc.addTrack(VideoIngestTrack(relay.subscribe(track), client_id))
+        
+        # 2. Return processed stream (with MediaPipe drawings)
+        pc.addTrack(VideoProcessedTrack())
 
     # Set remote description
     await pc.setRemoteDescription(offer)
