@@ -70,8 +70,7 @@ async def mobile_websocket_ingest(websocket: WebSocket):
     client_id = f"mobile_{websocket.client.host}"
     logger.info(f"Mobile standardized connection: {client_id}")
     
-    # Auto-engage mobile session defaults
-    store.set_active_mode("all")
+    # Auto-engage mobile session source (let the dashboard control the AI mode)
     store.set_input_source("mobile")
     
     try:
