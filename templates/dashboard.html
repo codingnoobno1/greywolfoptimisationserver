@@ -160,15 +160,20 @@
     <div class="main-viewport">
         <div class="viewport-header">
             <div style="display: flex; align-items: center; gap: 15px;">
-                <span id="active-source-tag" class="status-tag">SOURCE: UNKNOWN</span>
+                <span id="active-source-tag" class="status-tag" style="background: rgba(88, 166, 255, 0.2); border: 1px solid var(--accent);">SOURCE: SCANNING...</span>
                 <span id="active-mode-tag" class="status-tag" style="background: rgba(188, 140, 255, 0.1); color: var(--purple);">MODE: STANDBY</span>
             </div>
-            <div style="display: flex; gap: 10px;">
-                <i class="fas fa-expand-alt" style="cursor: pointer; opacity: 0.5;"></i>
+            <div id="connection-status" style="font-size: 0.7rem; opacity: 0.5;">
+                <i class="fas fa-circle" style="color: var(--success); font-size: 0.5rem; margin-right: 5px;"></i> SYSTEM ONLINE
             </div>
         </div>
         <div class="stream-wrapper">
-            <img id="main-feed" src="/api/output/stream" class="live-feed" alt="Standardized Video Feed">
+            <img id="main-feed" src="/api/output/stream/local_webcam" class="live-feed" alt="Standardized Video Feed">
+            <div id="no-signal" style="display:none; position: absolute; text-align:center;">
+                <i class="fas fa-video-slash fa-3x" style="opacity: 0.2; margin-bottom: 15px;"></i>
+                <div class="stat-label">NO ACTIVE SIGNAL</div>
+                <div style="font-size: 0.7rem; opacity: 0.4;">Connect a mobile app or enable webcam</div>
+            </div>
         </div>
     </div>
 
