@@ -36,33 +36,42 @@ async def mobile_websocket_ingest(websocket: WebSocket, source_id: str):
     
     try:
         while True:
-            # 1. Receive binary JPEG
-            data = await websocket.receive_bytes()
-            
-            # 2. Decode
-            nparr = np.frombuffer(data, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if frame is not None:
-                # 3. Wrap in FramePacket
-                packet = FramePacket(
-                    frame=frame,
-                    source_id=source_id,
-                    source_type="mobile",
-                    fps=settings.MOBILE_FPS,
-                    quality=settings.MOBILE_JPEG_QUALITY
-                )
-                push_frame(packet)
+            try:
+                # 1. Receive binary JPEG (Throttle point)
+                data = await websocket.receive_bytes()
                 
-                # 4. Feedback (Metadata) specific to this source
-                result = store.get_result(source_id)
-                await websocket.send_json({
-                    "status": "active",
-                    "source": source_id,
-                    "detections": result.get("detections", []),
-                    "gestures": result.get("gestures", []),
-                    "fps": round(result.get("fps", 0.0), 2)
-                })
+                # 2. Decode
+                nparr = np.frombuffer(data, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                
+                if frame is not None:
+                    # 3. Wrap in FramePacket & Push to Queue
+                    packet = FramePacket(
+                        frame=frame,
+                        source_id=source_id,
+                        source_type="mobile_binary",
+                        fps=settings.MOBILE_FPS,
+                        quality=settings.MOBILE_JPEG_QUALITY
+                    )
+                    push_frame(packet)
+                    
+                    # 4. Push real-time AI metadata back to mobile device
+                    result = store.get_result(source_id)
+                    await websocket.send_json({
+                        "status": "active",
+                        "source": source_id,
+                        "detections": result.get("detections", []),
+                        "gestures": result.get("gestures", []),
+                        "fps": round(result.get("fps", 0.0), 2)
+                    })
+                else:
+                    logger.warning(f"Mobile WS: Received empty/invalid frame from {source_id}")
+                    
+            except WebSocketDisconnect:
+                raise # Re-raise to outer catch
+            except Exception as loop_e:
+                logger.error(f"Mobile Ingestion Loop Error: {loop_e}")
+                continue # Don't kill the socket for one bad frame
     except WebSocketDisconnect:
         logger.info(f"Ingestion WS: Source '{source_id}' disconnected")
     except Exception as e:
