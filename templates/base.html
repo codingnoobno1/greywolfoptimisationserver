@@ -166,8 +166,8 @@
 
         function startIngestion() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // UPDATED: Point to the new standardized mobile ingestion endpoint
-            ingestWS = new WebSocket(`${protocol}//${location.host}/api/mobile/ws`);
+            // Use 'web_browser' as the unique source ID for the laptop camera
+            ingestWS = new WebSocket(`${protocol}//${location.host}/api/mobile/ws/web_browser`);
             ingestWS.binaryType = 'blob'; 
 
             const video = document.getElementById('browser-capture-video');

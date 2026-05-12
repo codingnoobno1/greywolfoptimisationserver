@@ -23,18 +23,16 @@ async def get_mobile_status(source_id: str):
 
 from core.models import FramePacket
 
-@router.websocket("/ws")
-async def mobile_websocket_ingest(websocket: WebSocket):
+@router.websocket("/ws/{source_id}")
+async def mobile_websocket_ingest(websocket: WebSocket, source_id: str):
     """
-    Standardized Mobile Ingestion.
-    Protocol: Binary JPEG frames.
+    Standardized Mobile Ingestion with Dynamic Source ID.
     """
     await websocket.accept()
-    client_id = f"mobile_{websocket.client.host}"
-    logger.info(f"Mobile WS: Connection from {client_id}")
+    logger.info(f"Ingestion WS: Source '{source_id}' connected")
     
-    # Send immediate ACK for synchronization
-    await websocket.send_json({"status": "connected", "client_id": client_id})
+    # Send immediate ACK
+    await websocket.send_json({"status": "connected", "source_id": source_id})
     
     try:
         while True:
@@ -49,24 +47,24 @@ async def mobile_websocket_ingest(websocket: WebSocket):
                 # 3. Wrap in FramePacket
                 packet = FramePacket(
                     frame=frame,
-                    source_id=client_id,
+                    source_id=source_id,
                     source_type="mobile",
                     fps=settings.MOBILE_FPS,
                     quality=settings.MOBILE_JPEG_QUALITY
                 )
                 push_frame(packet)
                 
-                # 4. Feedback (Metadata) specific to this mobile source
-                result = store.get_result(client_id)
+                # 4. Feedback (Metadata) specific to this source
+                result = store.get_result(source_id)
                 await websocket.send_json({
                     "status": "active",
-                    "source": client_id,
+                    "source": source_id,
                     "detections": result.get("detections", []),
                     "gestures": result.get("gestures", []),
                     "fps": round(result.get("fps", 0.0), 2)
                 })
     except WebSocketDisconnect:
-        logger.info(f"Mobile WS: Disconnected: {client_id}")
+        logger.info(f"Ingestion WS: Source '{source_id}' disconnected")
     except Exception as e:
-        logger.error(f"Mobile WS: Error for {client_id}: {e}")
+        logger.error(f"Ingestion WS: Error for {source_id}: {e}")
 
