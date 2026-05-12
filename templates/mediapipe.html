@@ -22,8 +22,6 @@
         position: relative;
     }
 
-    .video-viewport img { width: 100%; height: 100%; object-fit: contain; }
-
     .sidebar { display: flex; flex-direction: column; gap: 1.5rem; }
 
     .control-card {
@@ -67,9 +65,12 @@
 {% block content %}
 <div class="gesture-layout">
     <div class="video-viewport">
-        <img src="/video_feed" id="mp-feed">
-        <div style="position: absolute; bottom: 20px; right: 20px; padding: 10px 20px; background: rgba(0,0,0,0.5); border-radius: 12px; font-size: 0.8rem; color: var(--purple);">
-            <i class="fas fa-hand-paper"></i> MEDIAPIPE TRACKING
+        <!-- WebRTC Video Element -->
+        <video id="webrtc-video" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: contain;"></video>
+        
+        <div style="position: absolute; bottom: 20px; right: 20px; padding: 10px 20px; background: rgba(0,0,0,0.5); border-radius: 12px; font-size: 0.8rem; color: var(--purple); display: flex; align-items: center; gap: 10px;">
+            <div id="rtc-indicator" style="width: 8px; height: 8px; border-radius: 50%; background: var(--danger);"></div>
+            <span><i class="fas fa-hand-paper"></i> MEDIAPIPE WEB-RTC</span>
         </div>
     </div>
 
@@ -92,6 +93,9 @@
                 <span style="opacity: 0.6;">Tracking FPS</span>
                 <span id="fps-val" style="font-family: 'JetBrains Mono'; font-weight: 700;">0.0</span>
             </div>
+            <div style="font-size: 0.6rem; opacity: 0.4; margin-top: 10px; text-transform: uppercase;" id="rtc-id-tag">
+                ID: SCANNING...
+            </div>
         </div>
     </aside>
 </div>
@@ -99,8 +103,58 @@
 
 {% block extra_js %}
 <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const sourceId = urlParams.get('source_id') || `mobile_flutter_${Math.floor(Math.random()*1000)}`;
+    document.getElementById('rtc-id-tag').innerText = `ID: ${sourceId}`;
+    
+    // 1. Initialize WebRTC
+    const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+    
+    pc.ontrack = (event) => {
+        document.getElementById('webrtc-video').srcObject = event.streams[0];
+        document.getElementById('rtc-indicator').style.background = 'var(--success)';
+        document.getElementById('rtc-indicator').style.boxShadow = '0 0 10px var(--success)';
+    };
+
+    async function startWebRTC() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { width: 640, height: 480, frameRate: 15 } 
+            });
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            const res = await fetch(`/api/mobile/webrtc/offer/${sourceId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type })
+            });
+            
+            const answer = await res.json();
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            
+            // Setup Telemetry for this specific source
+            setupTelemetry(sourceId);
+            
+            // Auto-enable MediaPipe for this source via the tiered control API
+            fetch(`/api/web/control/mode/${sourceId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode: 'mediapipe'})
+            });
+        } catch (e) {
+            console.error("WebRTC Start Error:", e);
+        }
+    }
+
     window.addEventListener('telemetryUpdate', (e) => {
         const data = e.detail;
+        if (data.source !== sourceId) return;
+
         if (data.fps) document.getElementById('fps-val').innerText = data.fps.toFixed(1);
         
         const gestures = data.gestures || [];
@@ -113,8 +167,6 @@
         });
     });
 
-    // Auto-enable MediaPipe
-    fetch('/api/v1/handgesture/toggle?enabled=true', {method: 'POST'});
-    fetch('/api/v1/greywolf/toggle?enabled=false', {method: 'POST'});
+    startWebRTC();
 </script>
 {% endblock %}
