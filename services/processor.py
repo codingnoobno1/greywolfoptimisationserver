@@ -16,7 +16,7 @@ def process_frame(packet: FramePacket):
     3. Render & Store results
     """
     start_time = time.time()
-    active_mode = store.get_active_mode()
+    active_mode = store.get_active_mode(packet.source_id)
     
     # 1. Normalize Frame Resolution (Standardization Requirement)
     frame = packet.frame
@@ -57,11 +57,12 @@ def process_frame(packet: FramePacket):
         for g in result['gestures']:
             db.log_event("GESTURE", f"[{packet.source_id}] {g['detected_gesture']}")
             
-            # Publish to Uno R4 via MQTT (Telemetry only now)
+            # Publish to Uno R4 via MQTT
             gesture = g['detected_gesture']
+            # Standardized Command Format: S1_ON, S1_OFF, S2_ON, S2_OFF, REG_1..5
             if gesture == "Switch 1":
                 mqtt_client.publish("greywolf/status/event", f"G_DETECTED_S1_{packet.source_id}")
             elif gesture == "Switch 2":
                 mqtt_client.publish("greywolf/status/event", f"G_DETECTED_S2_{packet.source_id}")
 
-    store.update_result(result)
+    store.update_result(packet.source_id, result)

@@ -52,21 +52,22 @@ class VideoProcessedTrack(VideoStreamTrack):
     A video stream track that pulls the latest processed frame
     from the ResultStore and sends it back to the client.
     """
-    def __init__(self):
+    def __init__(self, source_id: str):
         super().__init__()
+        self.source_id = source_id
         self.counter = 0
 
     async def recv(self):
         # Limit framerate of processed stream to ~20 FPS to save bandwidth/CPU
         await asyncio.sleep(0.05) 
         
-        # Get annotated frame from store
-        img = store.get_latest_frame()
+        # Get annotated frame from store for THIS specific source
+        img = store.get_latest_frame(self.source_id)
         
         if img is None:
             # Send a black placeholder if no frame yet
             img = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(img, "WAITING FOR AI...", (150, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.putText(img, f"WAITING FOR {self.source_id}...", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
         # Convert numpy BGR to aiortc VideoFrame
         frame = VideoFrame.from_ndarray(img, format="bgr24")
@@ -76,32 +77,29 @@ class VideoProcessedTrack(VideoStreamTrack):
         
         return frame
 
-@router.post("/offer")
-async def webrtc_offer(request: Request):
+@router.post("/offer/{source_id}")
+async def webrtc_offer(source_id: str, request: Request):
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
     pc = RTCPeerConnection()
-    client_id = f"webrtc_{request.client.host}"
     
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
-        logger.info(f"WebRTC connection state is {pc.connectionState}")
+        logger.info(f"WebRTC [{source_id}] state is {pc.connectionState}")
         if pc.connectionState == "failed" or pc.connectionState == "closed":
             await pc.close()
 
     @pc.on("track")
     def on_track(track):
       if track.kind == "video":
-        logger.info(f"WebRTC: Received video track from {client_id}")
-        # Set input source to mobile for the dashboard
-        store.set_input_source("mobile")
+        logger.info(f"WebRTC: Received video track from {source_id}")
         
-        # 1. Ingest incoming stream
-        pc.addTrack(VideoIngestTrack(relay.subscribe(track), client_id))
+        # 1. Ingest incoming stream to the specific source slot
+        pc.addTrack(VideoIngestTrack(relay.subscribe(track), source_id))
         
-        # 2. Return processed stream (with MediaPipe drawings)
-        pc.addTrack(VideoProcessedTrack())
+        # 2. Return processed stream (with MediaPipe drawings) for THIS source
+        pc.addTrack(VideoProcessedTrack(source_id))
 
     # Set remote description
     await pc.setRemoteDescription(offer)

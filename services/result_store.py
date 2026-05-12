@@ -3,50 +3,60 @@ from threading import Lock
 class ResultStore:
     def __init__(self):
         self._lock = Lock()
-        self._latest_result = {
-            'frame': None,
-            'annotated_frame': None,
-            'detections': [],
-            'gestures': [],
-            'fps': 0.0
-        }
-        self._active_mode = 'none' # none, yolo, mediapipe, all
-        self._input_source = 'unknown' # webcam, mqtt, mobile, unknown
+        self._sources = {} # source_id -> result_dict
+        self._active_modes = {} # source_id -> mode
+        
+    def _ensure_source(self, source_id: str):
+        if source_id not in self._sources:
+            self._sources[source_id] = {
+                'frame': None,
+                'annotated_frame': None,
+                'detections': [],
+                'gestures': [],
+                'telemetry': {},
+                'fps': 0.0
+            }
+            if source_id not in self._active_modes:
+                self._active_modes[source_id] = 'none'
 
-    def update_result(self, result: dict):
+    def update_result(self, source_id: str, result: dict):
         with self._lock:
-            self._latest_result.update(result)
+            self._ensure_source(source_id)
+            self._sources[source_id].update(result)
 
-    def get_result(self) -> dict:
+    def get_result(self, source_id: str) -> dict:
         with self._lock:
+            if source_id not in self._sources:
+                return {'detections': [], 'gestures': [], 'fps': 0.0, 'telemetry': {}}
+            res = self._sources[source_id]
             return {
-                'detections': self._latest_result.get('detections', []),
-                'gestures': self._latest_result.get('gestures', []),
-                'fps': self._latest_result.get('fps', 0.0)
+                'detections': res.get('detections', []),
+                'gestures': res.get('gestures', []),
+                'telemetry': res.get('telemetry', {}),
+                'fps': res.get('fps', 0.0)
             }
             
-    def get_latest_frame(self):
+    def get_latest_frame(self, source_id: str):
         with self._lock:
+            if source_id not in self._sources:
+                return None
+            res = self._sources[source_id]
             # FIX: Explicit None check to avoid NumPy truth value ambiguity crash
-            frame = self._latest_result.get('annotated_frame')
+            frame = res.get('annotated_frame')
             if frame is None:
-                frame = self._latest_result.get('frame')
+                frame = res.get('frame')
             return frame
 
-    def set_active_mode(self, mode: str):
+    def set_active_mode(self, source_id: str, mode: str):
         with self._lock:
-            self._active_mode = mode
+            self._active_modes[source_id] = mode
 
-    def get_active_mode(self) -> str:
+    def get_active_mode(self, source_id: str) -> str:
         with self._lock:
-            return self._active_mode
+            return self._active_modes.get(source_id, 'none')
 
-    def set_input_source(self, source: str):
+    def list_sources(self) -> list:
         with self._lock:
-            self._input_source = source
-
-    def get_input_source(self) -> str:
-        with self._lock:
-            return self._input_source
+            return list(self._sources.keys())
 
 store = ResultStore()
