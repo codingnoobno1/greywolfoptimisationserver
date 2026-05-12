@@ -22,6 +22,7 @@ from api.v1.iot import router as iot_router
 from api.v1.output import router as output_router
 from api.v1.system import router as system_router
 from api.v1.control import router as control_router
+from api.v1.webrtc import router as webrtc_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -78,6 +79,7 @@ app.include_router(output_router, prefix='/api/output', tags=['Distribution'])
 # Management & Health
 app.include_router(system_router, prefix='/api/system', tags=['System'])
 app.include_router(control_router, prefix='/api', tags=['Control'])
+app.include_router(webrtc_router, prefix='/api/webrtc', tags=['Ingestion'])
 
 # --- UI PAGE ROUTES ---
 
