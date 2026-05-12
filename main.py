@@ -34,10 +34,8 @@ async def lifespan(app: FastAPI):
     # Initialize Default Input Source
     if settings.USE_WEBCAM:
         webcam_service.start()
-        store.set_input_source('webcam')
     else:
         mqtt_client.start()
-        store.set_input_source('mqtt')
     
     db.log_event('SYSTEM', 'Platform Started - Standardized Architecture Active')
     
