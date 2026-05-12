@@ -236,7 +236,7 @@
     async function switchSource(sourceId) {
         currentSourceId = sourceId;
         const feed = document.getElementById('main-feed');
-        feed.src = `/api/output/stream/${sourceId}`;
+        feed.src = `/api/web/stream/${sourceId}`;
         setupTelemetry(sourceId);
         updateUIState();
         
@@ -246,7 +246,7 @@
 
     async function setMode(mode) {
         try {
-            await fetch(`/api/control/output/mode/${currentSourceId}`, {
+            await fetch(`/api/web/control/mode/${currentSourceId}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({mode})
@@ -257,7 +257,7 @@
 
     async function updateUIState() {
         try {
-            const listRes = await fetch('/api/output/list');
+            const listRes = await fetch('/api/web/list');
             const listData = await listRes.json();
             const sources = listData.sources;
             
@@ -274,7 +274,7 @@
                 });
             }
 
-            const res = await fetch(`/api/control/status/${currentSourceId}`);
+            const res = await fetch(`/api/web/status/${currentSourceId}`);
             if (res.status === 404) return;
             const data = await res.json();
             

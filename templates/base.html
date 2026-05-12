@@ -201,8 +201,8 @@
             }
 
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // UPDATED: Point to source-aware output metadata endpoint
-            telemetryWS = new WebSocket(`${protocol}//${location.host}/api/output/ws/${sourceId}`);
+            // UPDATED: Point to the new tiered WEB metadata endpoint
+            telemetryWS = new WebSocket(`${protocol}//${location.host}/api/web/ws/${sourceId}`);
             
             telemetryWS.onopen = () => {
                 document.getElementById('ws-indicator').style.background = 'var(--success)';
