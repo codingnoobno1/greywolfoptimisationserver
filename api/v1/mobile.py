@@ -89,11 +89,27 @@ async def mobile_telemetry_ws(websocket: WebSocket, source_id: str):
     except WebSocketDisconnect:
         pass
 
+@router.get("/snapshot/{source_id}")
+async def mobile_snapshot(source_id: str):
+    """
+    Returns a single JPEG frame for the given source.
+    Flutter polls this at high frequency for reliable video.
+    No persistent connections, no MJPEG parsing, no SSL stream issues.
+    """
+    from fastapi.responses import Response
+    frame = store.get_latest_frame(source_id)
+    if frame is None:
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(frame, f'WAITING: {source_id}', (140, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+    _, encoded = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+    return Response(content=bytes(encoded), media_type="image/jpeg")
+
 @router.get("/stream/{source_id}")
 async def mobile_video_stream(source_id: str):
     """
-    Dedicated Mobile Distribution Mirror.
-    Provides a high-priority stream path specifically for Flutter devices.
+    Dedicated Mobile Distribution Mirror (MJPEG).
     """
     from api.v1.web import web_mjpeg_generator
     return StreamingResponse(
