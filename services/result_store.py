@@ -10,7 +10,8 @@ class ResultStore:
             'gestures': [],
             'fps': 0.0
         }
-        self._active_mode = 'none' # none, yolo, mediapipe
+        self._active_mode = 'none' # none, yolo, mediapipe, all
+        self._input_source = 'unknown' # webcam, mqtt, mobile, unknown
 
     def update_result(self, result: dict):
         with self._lock:
@@ -39,5 +40,13 @@ class ResultStore:
     def get_active_mode(self) -> str:
         with self._lock:
             return self._active_mode
+
+    def set_input_source(self, source: str):
+        with self._lock:
+            self._input_source = source
+
+    def get_input_source(self) -> str:
+        with self._lock:
+            return self._input_source
 
 store = ResultStore()

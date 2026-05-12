@@ -1,42 +1,44 @@
-from fastapi import FastAPI, Request, WebSocket
-from fastapi.responses import StreamingResponse, HTMLResponse
+import os
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
-import uvicorn
-import os
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
+# Core & Services
 from core.logger import logger
+from config.settings import settings
 from services.mqtt_client import mqtt_client
 from services.webcam_service import webcam_service
-from workers.ai_worker import start_workers
-from config.settings import settings
+from services.result_store import store
 from services.db_service import db
-from services.frame_queue import push_frame
-from fastapi import UploadFile, File
+from workers.ai_worker import start_workers
 
-# Routers
-from api.v1.health import router as health_router
-from api.v1.greywolf import router as yolo_router
-from api.v1.handgesture import router as mediapipe_router
-
-# Streaming
-from streaming.mjpeg import mjpeg_generator
-from streaming.websocket import websocket_endpoint
-from streaming.ingestion import browser_ingest_endpoint
+# Standardized Routers
+from api.v1.mobile import router as mobile_router
+from api.v1.iot import router as iot_router
+from api.v1.output import router as output_router
+from api.v1.system import router as system_router
+from api.v1.control import router as control_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info('Starting Greywolf AI Platform...')
+    logger.info('Initializing Greywolf AI Platform (Standardized)...')
+    
+    # Start AI Processing Pipeline
     start_workers(settings.NUM_WORKERS)
     
+    # Initialize Default Input Source
     if settings.USE_WEBCAM:
         webcam_service.start()
+        store.set_input_source('webcam')
     else:
         mqtt_client.start()
+        store.set_input_source('mqtt')
     
-    db.log_event('SYSTEM', 'Platform Started')
+    db.log_event('SYSTEM', 'Platform Started - Standardized Architecture Active')
     
     yield
     
@@ -44,9 +46,13 @@ async def lifespan(app: FastAPI):
     mqtt_client.stop()
     webcam_service.stop()
 
-app = FastAPI(title='Greywolf AI', lifespan=lifespan)
+app = FastAPI(
+    title='Greywolf AI Standardized Platform', 
+    version='2.0.0',
+    lifespan=lifespan
+)
 
-# Add CORS Middleware for Flutter/React compatibility
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
@@ -55,17 +61,27 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+# Static Files & Templates
 templates = Jinja2Templates(directory='templates')
 os.makedirs('static', exist_ok=True)
 app.mount('/static', StaticFiles(directory='static'), name='static')
 
-app.include_router(health_router, prefix='/api/v1')
-app.include_router(yolo_router, prefix='/api/v1/greywolf')
-app.include_router(mediapipe_router, prefix='/api/v1/handgesture')
+# --- STANDARDIZED ROUTE REGISTRATION ---
 
-# --- PAGE ROUTES ---
+# Ingestion Layer (Input)
+app.include_router(mobile_router, prefix='/api/mobile', tags=['Ingestion'])
+app.include_router(iot_router, prefix='/api/iot', tags=['Ingestion'])
 
-@app.get('/', response_class=HTMLResponse)
+# Distribution Layer (Output)
+app.include_router(output_router, prefix='/api/output', tags=['Distribution'])
+
+# Management & Health
+app.include_router(system_router, prefix='/api/system', tags=['System'])
+app.include_router(control_router, prefix='/api', tags=['Control'])
+
+# --- UI PAGE ROUTES ---
+
+@app.get('/', response_class=HTMLResponse, tags=['UI'])
 async def home_page(request: Request):
     return templates.TemplateResponse(
         request=request, 
@@ -73,61 +89,13 @@ async def home_page(request: Request):
         context={'active_page': 'home'}
     )
 
-@app.get('/yolo', response_class=HTMLResponse)
-async def yolo_page(request: Request):
-    return templates.TemplateResponse(
-        request=request, 
-        name='yolo.html', 
-        context={'active_page': 'yolo'}
-    )
-
-@app.get('/mediapipe', response_class=HTMLResponse)
-async def mediapipe_page(request: Request):
-    return templates.TemplateResponse(
-        request=request, 
-        name='mediapipe.html', 
-        context={'active_page': 'mediapipe'}
-    )
-
-@app.get('/settings', response_class=HTMLResponse)
+@app.get('/settings', response_class=HTMLResponse, tags=['UI'])
 async def settings_page(request: Request):
     return templates.TemplateResponse(
         request=request, 
         name='settings.html', 
         context={'active_page': 'settings'}
     )
-
-# --- STREAMING ROUTES ---
-
-@app.get('/video_feed')
-async def video_feed():
-    return StreamingResponse(
-        mjpeg_generator(), 
-        media_type='multipart/x-mixed-replace; boundary=frame'
-    )
-
-@app.websocket('/ws')
-async def ws_endpoint(websocket: WebSocket):
-    await websocket_endpoint(websocket)
-
-@app.websocket('/ingest')
-async def ingest_endpoint(websocket: WebSocket):
-    await browser_ingest_endpoint(websocket)
-
-@app.post('/api/v1/ingest/frame')
-async def ingest_frame(request: Request):
-    # Receive raw binary JPEG from ESP32 or other source
-    import cv2
-    import numpy as np
-    
-    body = await request.body()
-    nparr = np.frombuffer(body, np.uint8)
-    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    if frame is not None:
-        push_frame(frame)
-        return {'status': 'ok'}
-    return {'status': 'error', 'message': 'Invalid frame data'}
 
 if __name__ == '__main__':
     uvicorn.run('main:app', host='0.0.0.0', port=8000, reload=True)

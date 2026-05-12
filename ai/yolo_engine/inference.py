@@ -17,7 +17,7 @@ def run_yolo(frame):
             cls = int(box.cls[0])
             class_name = model.names[cls]
             detections.append({
-                "class": class_name,
+                "label": class_name,
                 "confidence": conf,
                 "bbox": [x1, y1, x2, y2]
             })

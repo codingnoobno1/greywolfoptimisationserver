@@ -4,6 +4,7 @@ import time
 from services.frame_queue import push_frame
 from core.logger import logger
 from config.settings import settings
+from core.models import FramePacket
 
 class WebcamService:
     def __init__(self):
@@ -22,9 +23,11 @@ class WebcamService:
     def stop(self):
         self.running = False
         if self.thread:
-            self.thread.join()
+            # Using timeout to prevent hanging if thread is stuck
+            self.thread.join(timeout=1.0)
         if self.cap:
             self.cap.release()
+            self.cap = None
         logger.info('Webcam ingestion stopped.')
 
     def _run(self):
@@ -35,12 +38,23 @@ class WebcamService:
             return
 
         while self.running:
-            ret, frame = self.cap.read()
-            if not ret:
-                logger.error('Failed to grab frame from webcam.')
-                break
-            
-            push_frame(frame)
+            try:
+                ret, frame = self.cap.read()
+                if not ret:
+                    logger.error('Failed to grab frame from webcam.')
+                    break
+                
+                # Wrap in standardized FramePacket
+                packet = FramePacket(
+                    frame=frame,
+                    source_id="local_webcam",
+                    source_type="webcam",
+                    fps=settings.FPS_LIMIT
+                )
+                push_frame(packet)
+            except Exception as e:
+                logger.error(f"Error in webcam loop: {e}")
+                
             time.sleep(1.0 / settings.FPS_LIMIT)
 
 webcam_service = WebcamService()
