@@ -233,6 +233,24 @@
         else setMode('all');
     }
 
+    let telemetryWs = null;
+
+    function setupTelemetry(sourceId) {
+        if (telemetryWs) {
+            telemetryWs.close();
+        }
+        
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/api/web/ws/${sourceId}`;
+        console.log(`Connecting to Telemetry: ${wsUrl}`);
+        
+        telemetryWs = new WebSocket(wsUrl);
+        telemetryWs.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            window.dispatchEvent(new CustomEvent('telemetryUpdate', { detail: data }));
+        };
+    }
+
     async function switchSource(sourceId) {
         currentSourceId = sourceId;
         const feed = document.getElementById('main-feed');
@@ -319,6 +337,7 @@
     });
 
     setView('ai');
+    setupTelemetry(currentSourceId);
     updateUIState();
     setInterval(updateUIState, 2000);
 </script>
