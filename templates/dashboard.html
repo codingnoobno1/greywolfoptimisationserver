@@ -163,60 +163,54 @@
                 <span id="active-source-tag" class="status-tag" style="background: rgba(88, 166, 255, 0.2); border: 1px solid var(--accent);">SOURCE: SCANNING...</span>
                 <span id="active-mode-tag" class="status-tag" style="background: rgba(188, 140, 255, 0.1); color: var(--purple);">MODE: STANDBY</span>
             </div>
-            <div id="connection-status" style="font-size: 0.7rem; opacity: 0.5;">
-                <i class="fas fa-circle" style="color: var(--success); font-size: 0.5rem; margin-right: 5px;"></i> SYSTEM ONLINE
+            <div id="view-toggle" style="display: flex; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 2px;">
+                <button class="action-btn" style="padding: 5px 15px; font-size: 0.6rem; border: none;" onclick="setView('ai')" id="view-ai">AI FEED</button>
+                <button class="action-btn" style="padding: 5px 15px; font-size: 0.6rem; border: none;" onclick="setView('raw')" id="view-raw">RAW INPUT</button>
             </div>
         </div>
         <div class="stream-wrapper">
+            <!-- HUD Overlay -->
+            <div id="hud-overlay" style="position: absolute; top: 20px; left: 20px; z-index: 10; pointer-events: none;">
+                <div id="hud-fps" style="font-family: 'JetBrains Mono'; font-size: 0.8rem; color: #3fb950; text-shadow: 0 0 5px #000;">FPS: 0.0</div>
+                <div id="hud-res" style="font-family: 'JetBrains Mono'; font-size: 0.6rem; opacity: 0.7;">RES: 640x480</div>
+            </div>
+
             <img id="main-feed" src="/api/output/stream/local_webcam" class="live-feed" alt="Standardized Video Feed">
+            
             <div id="no-signal" style="display:none; position: absolute; text-align:center;">
                 <i class="fas fa-video-slash fa-3x" style="opacity: 0.2; margin-bottom: 15px;"></i>
                 <div class="stat-label">NO ACTIVE SIGNAL</div>
-                <div style="font-size: 0.7rem; opacity: 0.4;">Connect a mobile app or enable webcam</div>
+                <div style="font-size: 0.7rem; opacity: 0.4;">Connect a source to begin AI analysis</div>
             </div>
         </div>
     </div>
 
     <aside class="sidebar">
-        <!-- 1. SOURCE SELECTOR (The Heart of Multi-Stream) -->
+        <!-- 1. SOURCE SELECTOR -->
         <div class="control-card">
-            <h3><i class="fas fa-satellite"></i> Active Stream Discovery</h3>
+            <h3><i class="fas fa-satellite"></i> Stream Discovery</h3>
             <div id="source-list" class="grid-btns">
-                <!-- Sources will be injected here -->
-                <div class="stat-label full-width" style="text-align: center; padding: 20px;">Scanning for active sources...</div>
+                <div class="stat-label full-width" style="text-align: center; padding: 20px;">Scanning...</div>
             </div>
         </div>
 
-        <!-- 2. AI Mode Control (Source Specific) -->
+        <!-- 2. AI CONFIGURATION -->
         <div class="control-card">
-            <h3><i class="fas fa-brain"></i> AI Processing Engine</h3>
+            <h3><i class="fas fa-microchip"></i> Engine Control</h3>
             <div class="grid-btns">
-                <button class="action-btn mode-btn" data-mode="yolo" onclick="setMode('yolo')">YOLO v8</button>
+                <button class="action-btn mode-btn" data-mode="yolo" onclick="setMode('yolo')">YOLO V8</button>
                 <button class="action-btn mode-btn" data-mode="mediapipe" onclick="setMode('mediapipe')">GESTURES</button>
-                <button class="action-btn mode-btn full-width" data-mode="all" onclick="setMode('all')">DUAL AI ENGINE</button>
-                <button class="action-btn mode-btn full-width" data-mode="none" onclick="setMode('none')">RAW FEED (OFF)</button>
+                <button class="action-btn mode-btn full-width" data-mode="all" onclick="setMode('all')">DUAL-ENGINE</button>
             </div>
         </div>
 
-        <!-- Real-time Stats -->
-        <div class="control-card">
-            <h3><i class="fas fa-heartbeat"></i> Performance</h3>
-            <div class="stats-row">
-                <div class="stat-box">
-                    <span class="stat-label">System FPS</span>
-                    <span class="stat-value" id="val-fps">0.0</span>
-                </div>
-                <div class="stat-box">
-                    <span class="stat-label">Buffer</span>
-                    <span class="stat-value" id="val-queue">0</span>
-                </div>
+        <!-- 3. REAL-TIME EVENT LOG (Better Logging) -->
+        <div class="control-card" style="flex: 1; display: flex; flex-direction: column; min-height: 300px;">
+            <h3><i class="fas fa-list-ul"></i> AI Event Stream</h3>
+            <div id="event-log" style="flex: 1; background: #000; border-radius: 12px; padding: 10px; font-family: 'JetBrains Mono'; font-size: 0.65rem; overflow-y: auto; border: 1px solid var(--border);">
+                <!-- Events will be appended here -->
+                <div style="opacity: 0.3;">Waiting for detections...</div>
             </div>
-        </div>
-
-        <!-- Raw Telemetry -->
-        <div class="control-card" style="flex: 1; display: flex; flex-direction: column;">
-            <h3><i class="fas fa-code"></i> Metadata stream</h3>
-            <div id="json-log" class="log-viewer">{}</div>
         </div>
     </aside>
 </div>
@@ -226,50 +220,51 @@
 <script>
     let currentSourceId = 'local_webcam';
     let knownSources = [];
+    let viewMode = 'ai'; // 'ai' or 'raw'
+
+    function setView(mode) {
+        viewMode = mode;
+        document.getElementById('view-ai').classList.toggle('active', mode === 'ai');
+        document.getElementById('view-raw').classList.toggle('active', mode === 'raw');
+        
+        // In this implementation, the server always returns annotated if any AI is on.
+        // If mode is 'raw', we just disable AI for this source.
+        if (mode === 'raw') setMode('none');
+        else setMode('all');
+    }
 
     async function switchSource(sourceId) {
         currentSourceId = sourceId;
-        console.log("Switching to source:", sourceId);
-        
-        // 1. Update Video Feed URL
         const feed = document.getElementById('main-feed');
         feed.src = `/api/output/stream/${sourceId}`;
-        
-        // 2. Re-setup Telemetry WebSocket
         setupTelemetry(sourceId);
-        
-        // 3. Update UI
         updateUIState();
+        
+        // Reset log for new source
+        document.getElementById('event-log').innerHTML = `<div style="opacity:0.3">Watching ${sourceId}...</div>`;
     }
 
     async function setMode(mode) {
         try {
-            const res = await fetch(`/api/output/mode/${currentSourceId}`, {
+            await fetch(`/api/control/output/mode/${currentSourceId}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({mode})
             });
             updateUIState();
-        } catch (e) { console.error("Mode switch failed", e); }
+        } catch (e) {}
     }
 
     async function updateUIState() {
         try {
-            // Fetch list of all active sources
             const listRes = await fetch('/api/output/list');
             const listData = await listRes.json();
             const sources = listData.sources;
             
-            // Re-render source list if changed
             if (JSON.stringify(sources) !== JSON.stringify(knownSources)) {
                 knownSources = sources;
                 const container = document.getElementById('source-list');
                 container.innerHTML = '';
-                
-                if (sources.length === 0) {
-                    container.innerHTML = '<div class="stat-label full-width" style="text-align: center; padding: 20px;">No sources active. Start camera!</div>';
-                }
-
                 sources.forEach(sid => {
                     const btn = document.createElement('button');
                     btn.className = `action-btn source-btn ${sid === currentSourceId ? 'active' : ''}`;
@@ -279,35 +274,51 @@
                 });
             }
 
-            // Fetch specific status for current source
             const res = await fetch(`/api/control/status/${currentSourceId}`);
+            if (res.status === 404) return;
             const data = await res.json();
             
             document.getElementById('active-source-tag').innerText = `SOURCE: ${currentSourceId.toUpperCase()}`;
-
-            // Update Mode Buttons
             document.querySelectorAll('.mode-btn').forEach(b => {
                 b.classList.toggle('active', b.dataset.mode === data.active_mode);
             });
             document.getElementById('active-mode-tag').innerText = `MODE: ${data.active_mode.toUpperCase()}`;
-            
         } catch (e) {}
     }
 
-    // Handle incoming telemetry from base.html WebSocket
     window.addEventListener('telemetryUpdate', (e) => {
         const data = e.detail;
-        if (data.source !== currentSourceId) return; // Guard for old WS messages
+        if (data.source !== currentSourceId) return;
 
-        document.getElementById('val-fps').innerText = data.fps.toFixed(1);
-        document.getElementById('json-log').innerText = JSON.stringify(data, null, 2);
+        // Update HUD
+        document.getElementById('hud-fps').innerText = `FPS: ${data.fps.toFixed(1)}`;
         
-        // Auto-scroll log
-        const log = document.getElementById('json-log');
-        log.scrollTop = log.scrollHeight;
+        // Update Event Log (Better Logging)
+        const log = document.getElementById('event-log');
+        
+        if (data.detections.length > 0) {
+            data.detections.forEach(d => {
+                const entry = document.createElement('div');
+                entry.style.color = '#f85149'; // Red for YOLO
+                entry.innerHTML = `<span style="opacity:0.5">[${new Date().toLocaleTimeString()}]</span> <b>OBJ:</b> ${d.label} (${(d.confidence*100).toFixed(0)}%)`;
+                log.prepend(entry);
+            });
+        }
+
+        if (data.gestures.length > 0) {
+            data.gestures.forEach(g => {
+                const entry = document.createElement('div');
+                entry.style.color = '#bc8cff'; // Purple for Gestures
+                entry.innerHTML = `<span style="opacity:0.5">[${new Date().toLocaleTimeString()}]</span> <b>GESTURE:</b> ${g.detected_gesture}`;
+                log.prepend(entry);
+            });
+        }
+        
+        // Limit log size
+        while (log.children.length > 50) log.lastChild.remove();
     });
 
-    // Initialize & Poll
+    setView('ai');
     updateUIState();
     setInterval(updateUIState, 2000);
 </script>
