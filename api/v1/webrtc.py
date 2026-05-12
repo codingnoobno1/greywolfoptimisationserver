@@ -21,10 +21,17 @@ from av import VideoFrame
 
 async def _consume_ingest(track, source_id):
     """Asynchronously consume frames from an inbound track"""
+    logger.info(f"WebRTC Ingest: Starting frame consumer for {source_id}")
+    # 1. Immediate registration so the source appears in the dashboard list instantly
+    store.update_result(source_id, {"status": "streaming"})
+    
+    count = 0
     try:
         while True:
             frame = await track.recv()
             img = frame.to_ndarray(format="bgr24")
+            
+            # 2. Push to AI processing queue
             packet = FramePacket(
                 frame=img,
                 source_id=source_id,
@@ -33,6 +40,10 @@ async def _consume_ingest(track, source_id):
                 quality=settings.MOBILE_JPEG_QUALITY
             )
             push_frame(packet)
+            
+            count += 1
+            if count % 100 == 0:
+                logger.debug(f"WebRTC Ingest [{source_id}]: Received {count} frames")
     except Exception as e:
         logger.error(f"WebRTC Ingest Error for {source_id}: {e}")
 
