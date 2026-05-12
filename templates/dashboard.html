@@ -173,20 +173,18 @@
     </div>
 
     <aside class="sidebar">
-        <!-- Input Source Control -->
+        <!-- 1. SOURCE SELECTOR (The Heart of Multi-Stream) -->
         <div class="control-card">
-            <h3><i class="fas fa-video"></i> Input Source</h3>
-            <div class="grid-btns">
-                <button class="action-btn source-btn" data-source="webcam" onclick="setSource('webcam')">WEBCAM</button>
-                <button class="action-btn source-btn" data-source="mqtt" onclick="setSource('mqtt')">ESP32 (IoT)</button>
-                <button class="action-btn source-btn full-width" data-source="mobile" onclick="setSource('mobile')">MOBILE / BROWSER</button>
-                <button class="action-btn source-btn full-width" data-source="none" onclick="setSource('none')">DISABLE INPUT</button>
+            <h3><i class="fas fa-satellite"></i> Active Stream Discovery</h3>
+            <div id="source-list" class="grid-btns">
+                <!-- Sources will be injected here -->
+                <div class="stat-label full-width" style="text-align: center; padding: 20px;">Scanning for active sources...</div>
             </div>
         </div>
 
-        <!-- AI Mode Control -->
+        <!-- 2. AI Mode Control (Source Specific) -->
         <div class="control-card">
-            <h3><i class="fas fa-brain"></i> AI Processing</h3>
+            <h3><i class="fas fa-brain"></i> AI Processing Engine</h3>
             <div class="grid-btns">
                 <button class="action-btn mode-btn" data-mode="yolo" onclick="setMode('yolo')">YOLO v8</button>
                 <button class="action-btn mode-btn" data-mode="mediapipe" onclick="setMode('mediapipe')">GESTURES</button>
@@ -221,42 +219,66 @@
 
 {% block extra_js %}
 <script>
-    const initialMode = "{{ initial_mode | default('none') }}";
+    let currentSourceId = 'local_webcam';
+    let knownSources = [];
 
-    async function setSource(source) {
-        try {
-            const res = await fetch('/api/input/source', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({source})
-            });
-            const data = await res.json();
-            updateUIState();
-        } catch (e) { console.error("Source switch failed", e); }
+    async function switchSource(sourceId) {
+        currentSourceId = sourceId;
+        console.log("Switching to source:", sourceId);
+        
+        // 1. Update Video Feed URL
+        const feed = document.getElementById('main-feed');
+        feed.src = `/api/output/stream/${sourceId}`;
+        
+        // 2. Re-setup Telemetry WebSocket
+        setupTelemetry(sourceId);
+        
+        // 3. Update UI
+        updateUIState();
     }
 
     async function setMode(mode) {
         try {
-            const res = await fetch('/api/output/mode', {
+            const res = await fetch(`/api/output/mode/${currentSourceId}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({mode})
             });
-            const data = await res.json();
             updateUIState();
         } catch (e) { console.error("Mode switch failed", e); }
     }
 
     async function updateUIState() {
         try {
-            const res = await fetch('/api/system/health');
+            // Fetch list of all active sources
+            const listRes = await fetch('/api/output/list');
+            const listData = await listRes.json();
+            const sources = listData.sources;
+            
+            // Re-render source list if changed
+            if (JSON.stringify(sources) !== JSON.stringify(knownSources)) {
+                knownSources = sources;
+                const container = document.getElementById('source-list');
+                container.innerHTML = '';
+                
+                if (sources.length === 0) {
+                    container.innerHTML = '<div class="stat-label full-width" style="text-align: center; padding: 20px;">No sources active. Start camera!</div>';
+                }
+
+                sources.forEach(sid => {
+                    const btn = document.createElement('button');
+                    btn.className = `action-btn source-btn ${sid === currentSourceId ? 'active' : ''}`;
+                    btn.innerText = sid.toUpperCase();
+                    btn.onclick = () => switchSource(sid);
+                    container.appendChild(btn);
+                });
+            }
+
+            // Fetch specific status for current source
+            const res = await fetch(`/api/control/status/${currentSourceId}`);
             const data = await res.json();
             
-            // Update Source Buttons
-            document.querySelectorAll('.source-btn').forEach(b => {
-                b.classList.toggle('active', b.dataset.source === data.active_source);
-            });
-            document.getElementById('active-source-tag').innerText = `SOURCE: ${data.active_source.toUpperCase()}`;
+            document.getElementById('active-source-tag').innerText = `SOURCE: ${currentSourceId.toUpperCase()}`;
 
             // Update Mode Buttons
             document.querySelectorAll('.mode-btn').forEach(b => {
@@ -264,13 +286,14 @@
             });
             document.getElementById('active-mode-tag').innerText = `MODE: ${data.active_mode.toUpperCase()}`;
             
-            document.getElementById('val-queue').innerText = data.performance.queue_size;
         } catch (e) {}
     }
 
     // Handle incoming telemetry from base.html WebSocket
     window.addEventListener('telemetryUpdate', (e) => {
         const data = e.detail;
+        if (data.source !== currentSourceId) return; // Guard for old WS messages
+
         document.getElementById('val-fps').innerText = data.fps.toFixed(1);
         document.getElementById('json-log').innerText = JSON.stringify(data, null, 2);
         
@@ -279,9 +302,8 @@
         log.scrollTop = log.scrollHeight;
     });
 
-    // Initialize
-    if (initialMode !== 'none') setMode(initialMode);
+    // Initialize & Poll
     updateUIState();
-    setInterval(updateUIState, 3000);
+    setInterval(updateUIState, 2000);
 </script>
 {% endblock %}
