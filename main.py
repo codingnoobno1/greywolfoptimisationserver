@@ -76,7 +76,7 @@ app.include_router(output_router, prefix='/api/output', tags=['Distribution'])
 
 # Management & Health
 app.include_router(system_router, prefix='/api/system', tags=['System'])
-app.include_router(control_router, prefix='/api', tags=['Control'])
+app.include_router(control_router, prefix='/api/control', tags=['Control'])
 app.include_router(webrtc_router, prefix='/api/webrtc', tags=['Ingestion'])
 
 # --- UI PAGE ROUTES ---
