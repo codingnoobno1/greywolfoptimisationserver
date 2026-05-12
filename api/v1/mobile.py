@@ -77,3 +77,15 @@ async def mobile_websocket_ingest(websocket: WebSocket, source_id: str):
     except Exception as e:
         logger.error(f"Ingestion WS: Error for {source_id}: {e}")
 
+@router.get("/stream/{source_id}")
+async def mobile_video_stream(source_id: str):
+    """
+    Dedicated Mobile Distribution Mirror.
+    Provides a high-priority stream path specifically for Flutter devices.
+    """
+    from api.v1.web import web_mjpeg_generator
+    return StreamingResponse(
+        web_mjpeg_generator(source_id),
+        media_type='multipart/x-mixed-replace; boundary=frame'
+    )
+
