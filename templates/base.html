@@ -193,16 +193,30 @@
             if (ingestWS) ingestWS.close();
         }
 
-        function setupTelemetry() {
+        let telemetryWS = null;
+
+        function setupTelemetry(sourceId = 'local_webcam') {
+            if (telemetryWS) {
+                telemetryWS.close();
+            }
+
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // UPDATED: Point to the new standardized output metadata endpoint
-            const ws = new WebSocket(`${protocol}//${location.host}/api/output/ws`);
-            ws.onopen = () => document.getElementById('ws-indicator').style.background = 'var(--success)';
-            ws.onclose = () => {
-                document.getElementById('ws-indicator').style.background = 'var(--danger)';
-                setTimeout(setupTelemetry, 2000);
+            // UPDATED: Point to source-aware output metadata endpoint
+            telemetryWS = new WebSocket(`${protocol}//${location.host}/api/output/ws/${sourceId}`);
+            
+            telemetryWS.onopen = () => {
+                document.getElementById('ws-indicator').style.background = 'var(--success)';
+                document.getElementById('ws-indicator').style.boxShadow = '0 0 10px var(--success)';
             };
-            ws.onmessage = (e) => window.dispatchEvent(new CustomEvent('telemetryUpdate', { detail: JSON.parse(e.data) }));
+            
+            telemetryWS.onclose = () => {
+                document.getElementById('ws-indicator').style.background = 'var(--danger)';
+                document.getElementById('ws-indicator').style.boxShadow = '0 0 10px var(--danger)';
+            };
+            
+            telemetryWS.onmessage = (e) => {
+                window.dispatchEvent(new CustomEvent('telemetryUpdate', { detail: JSON.parse(e.data) }));
+            };
         }
 
         function startWatchdog() {
@@ -215,7 +229,8 @@
             }
         }
 
-        setupTelemetry();
+        // Initial connection to the default local webcam slot
+        setupTelemetry('local_webcam');
     </script>
     {% block extra_js %}{% endblock %}
 </body>
