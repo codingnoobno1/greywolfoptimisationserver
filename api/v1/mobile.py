@@ -68,7 +68,7 @@ async def mobile_websocket_ingest(websocket: WebSocket, source_id: str):
     except Exception as e:
         logger.error(f"Ingestion WS: Error for {source_id}: {e}")
 
-@router.websocket("/ws/telemetry/{source_id}")
+@router.websocket("/telemetry/{source_id}")
 async def mobile_telemetry_ws(websocket: WebSocket, source_id: str):
     """
     Standardized Throttled Telemetry for Mobile.
