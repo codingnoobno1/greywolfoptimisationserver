@@ -144,6 +144,9 @@
             const btn = document.getElementById('btn-browser-cam');
             if (!browserStream) {
                 try {
+                    if (!navigator.mediaDevices) {
+                        throw new Error('This browser does not support camera access in non-secure contexts. Please use HTTPS or access via localhost.');
+                    }
                     browserStream = await navigator.mediaDevices.getUserMedia({ 
                         video: { width: {ideal: 640}, height: {ideal: 480}, frameRate: { ideal: 15 } } 
                     });
@@ -152,7 +155,7 @@
                     btn.innerHTML = '<i class="fas fa-stop"></i> STOP CAMERA';
                     startIngestion();
                 } catch (e) {
-                    alert('Camera Denied: ' + e.message);
+                    alert('Camera Access Error: ' + e.message + '\n\nNote: Camera access requires a Secure Context (HTTPS or localhost).');
                 }
             } else {
                 stopBrowserCam();
