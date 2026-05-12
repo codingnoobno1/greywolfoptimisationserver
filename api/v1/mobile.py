@@ -1,4 +1,5 @@
 import asyncio
+import time
 import cv2
 import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request
@@ -54,16 +55,6 @@ async def mobile_websocket_ingest(websocket: WebSocket, source_id: str):
                         quality=settings.MOBILE_JPEG_QUALITY
                     )
                     push_frame(packet)
-                    
-                    # 4. Push real-time AI metadata back to mobile device
-                    result = store.get_result(source_id)
-                    await websocket.send_json({
-                        "status": "active",
-                        "source": source_id,
-                        "detections": result.get("detections", []),
-                        "gestures": result.get("gestures", []),
-                        "fps": round(result.get("fps", 0.0), 2)
-                    })
                 else:
                     logger.warning(f"Mobile WS: Received empty/invalid frame from {source_id}")
                     
@@ -76,6 +67,27 @@ async def mobile_websocket_ingest(websocket: WebSocket, source_id: str):
         logger.info(f"Ingestion WS: Source '{source_id}' disconnected")
     except Exception as e:
         logger.error(f"Ingestion WS: Error for {source_id}: {e}")
+
+@router.websocket("/ws/telemetry/{source_id}")
+async def mobile_telemetry_ws(websocket: WebSocket, source_id: str):
+    """
+    Standardized Throttled Telemetry for Mobile.
+    Sends AI results at 5 FPS (200ms) to avoid network congestion.
+    """
+    await websocket.accept()
+    try:
+        while True:
+            result = store.get_result(source_id)
+            await websocket.send_json({
+                "status": "streaming",
+                "detections": result.get("detections", []),
+                "gestures": result.get("gestures", []),
+                "fps": round(result.get("fps", 0.0), 2),
+                "ts": time.time()
+            })
+            await asyncio.sleep(0.2) # Throttled to 5 FPS
+    except WebSocketDisconnect:
+        pass
 
 @router.get("/stream/{source_id}")
 async def mobile_video_stream(source_id: str):
