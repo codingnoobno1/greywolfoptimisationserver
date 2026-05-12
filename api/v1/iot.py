@@ -7,15 +7,15 @@ from core.logger import logger
 
 router = APIRouter()
 
-@router.post("/frame")
-async def iot_frame_ingest(request: Request):
+@router.post("/frame/{source_id}")
+async def iot_frame_ingest(source_id: str, request: Request):
     """
-    Standardized IoT Ingestion (ESP32-CAM).
+    Standardized IoT Edge Ingestion (ESP32-CAM).
     Protocol: HTTP POST Binary JPEG.
-    Resolution: Optimized for ESP32 (usually 320x240).
+    Endpoint: /api/iot/frame/{source_id}
     """
     try:
-        # 1. Receive binary payload
+        # 1. Receive binary payload (Raw JPEG bytes from ESP32)
         body = await request.body()
         if not body:
             raise HTTPException(status_code=400, detail="Empty frame data")
@@ -25,16 +25,15 @@ async def iot_frame_ingest(request: Request):
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         if frame is not None:
-            # 3. Wrap in FramePacket
-            client_ip = request.client.host
+            # 3. Push to AI Queue with dedicated source identity
             packet = FramePacket(
                 frame=frame,
-                source_id=f"iot_{client_ip}",
-                source_type="iot",
-                metadata={"protocol": "http_post"}
+                source_id=source_id,
+                source_type="iot_edge",
+                metadata={"client_ip": request.client.host}
             )
             push_frame(packet)
-            return {"status": "ok", "received": len(body)}
+            return {"status": "ok", "source": source_id, "size": len(body)}
         
         raise HTTPException(status_code=400, detail="Invalid JPEG data")
         
