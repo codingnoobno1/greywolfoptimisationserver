@@ -290,6 +290,11 @@
                     btn.onclick = () => switchSource(sid);
                     container.appendChild(btn);
                 });
+                
+                // Auto-switch: if current source doesn't exist in list, switch to first available
+                if (sources.length > 0 && !sources.includes(currentSourceId)) {
+                    switchSource(sources[0]);
+                }
             }
 
             const res = await fetch(`/api/web/status/${currentSourceId}`);
