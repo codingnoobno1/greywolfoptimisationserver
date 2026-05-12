@@ -84,27 +84,31 @@ async def webrtc_offer(source_id: str, request: Request):
 
     pc = RTCPeerConnection()
     
+    @pc.on("iceconnectionstatechange")
+    async def on_iceconnectionstatechange():
+        logger.info(f"ICE Connection State [{source_id}]: {pc.iceConnectionState}")
+
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
-        logger.info(f"WebRTC [{source_id}] state is {pc.connectionState}")
-        if pc.connectionState == "failed" or pc.connectionState == "closed":
+        logger.info(f"Peer Connection State [{source_id}]: {pc.connectionState}")
+        if pc.connectionState in ["failed", "closed"]:
             await pc.close()
 
     @pc.on("track")
     def on_track(track):
-      if track.kind == "video":
-        logger.info(f"WebRTC: Received video track from {source_id}")
-        
-        # 1. Ingest incoming stream to the specific source slot
-        pc.addTrack(VideoIngestTrack(relay.subscribe(track), source_id))
-        
-        # 2. Return processed stream (with MediaPipe drawings) for THIS source
-        pc.addTrack(VideoProcessedTrack(source_id))
+        if track.kind == "video":
+            logger.info(f"WebRTC: Inbound video track detected for {source_id}")
+            
+            # 1. Ingest: Subscribe to incoming track and push to AI pipeline
+            pc.addTrack(VideoIngestTrack(relay.subscribe(track), source_id))
+            
+            # 2. Distribution: Send back the AI-processed version of THIS source
+            pc.addTrack(VideoProcessedTrack(source_id))
 
-    # Set remote description
+    # Set remote description (The Offer from Flutter)
     await pc.setRemoteDescription(offer)
 
-    # Create answer
+    # Create local description (The Answer for Flutter)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
