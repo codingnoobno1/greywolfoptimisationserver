@@ -36,6 +36,19 @@
 
 {% block extra_js %}
 <script>
-    // In a real app, we would poll an endpoint for true MQTT status.
+    async function updateSettingsHealth() {
+        try {
+            const res = await fetch('/api/system/health');
+            const data = await res.json();
+            
+            document.getElementById('mqtt-status').innerText = data.active_source === 'mqtt' ? 'CONNECTED' : 'STANDBY';
+            document.getElementById('mqtt-status').style.color = data.active_source === 'mqtt' ? 'var(--success)' : 'var(--text)';
+            
+            // We could also update worker count if we added it to health API
+        } catch (e) {}
+    }
+    
+    updateSettingsHealth();
+    setInterval(updateSettingsHealth, 5000);
 </script>
 {% endblock %}

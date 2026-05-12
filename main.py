@@ -82,11 +82,27 @@ app.include_router(control_router, prefix='/api', tags=['Control'])
 # --- UI PAGE ROUTES ---
 
 @app.get('/', response_class=HTMLResponse, tags=['UI'])
-async def home_page(request: Request):
+async def dashboard_page(request: Request):
     return templates.TemplateResponse(
         request=request, 
-        name='index.html', 
-        context={'active_page': 'home'}
+        name='dashboard.html', 
+        context={'active_page': 'dashboard'}
+    )
+
+@app.get('/yolo', response_class=HTMLResponse, tags=['UI'])
+async def yolo_page(request: Request):
+    return templates.TemplateResponse(
+        request=request, 
+        name='dashboard.html', 
+        context={'active_page': 'vision', 'initial_mode': 'yolo'}
+    )
+
+@app.get('/mediapipe', response_class=HTMLResponse, tags=['UI'])
+async def mediapipe_page(request: Request):
+    return templates.TemplateResponse(
+        request=request, 
+        name='dashboard.html', 
+        context={'active_page': 'gestures', 'initial_mode': 'mediapipe'}
     )
 
 @app.get('/settings', response_class=HTMLResponse, tags=['UI'])

@@ -115,9 +115,10 @@
     <nav class="navbar">
         <a href="/" class="nav-brand"><i class="fas fa-ghost"></i> <span>GREYWOLF AI</span></a>
         <div class="nav-links">
-            <a href="/" class="nav-link {% if active_page == 'home' %}active{% endif %}"><i class="fas fa-home"></i> Home</a>
-            <a href="/yolo" class="nav-link {% if active_page == 'yolo' %}active{% endif %}"><i class="fas fa-bullseye"></i> Vision</a>
-            <a href="/mediapipe" class="nav-link {% if active_page == 'mediapipe' %}active{% endif %}"><i class="fas fa-hand-sparkles"></i> Gestures</a>
+            <a href="/" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}"><i class="fas fa-chart-line"></i> Dashboard</a>
+            <a href="/yolo" class="nav-link {% if active_page == 'vision' %}active{% endif %}"><i class="fas fa-bullseye"></i> Vision</a>
+            <a href="/mediapipe" class="nav-link {% if active_page == 'gestures' %}active{% endif %}"><i class="fas fa-hand-sparkles"></i> Gestures</a>
+            <a href="/settings" class="nav-link {% if active_page == 'settings' %}active{% endif %}"><i class="fas fa-cog"></i> Settings</a>
         </div>
         <div style="display: flex; gap: 15px; align-items: center;">
             <button id="btn-browser-cam" class="btn-premium" onclick="toggleBrowserCam()">
@@ -162,8 +163,9 @@
 
         function startIngestion() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ingestWS = new WebSocket(`${protocol}//${location.host}/ingest`);
-            ingestWS.binaryType = 'blob'; // Use binary for stability
+            // UPDATED: Point to the new standardized mobile ingestion endpoint
+            ingestWS = new WebSocket(`${protocol}//${location.host}/api/mobile/ws`);
+            ingestWS.binaryType = 'blob'; 
 
             const video = document.getElementById('browser-capture-video');
             const canvas = document.getElementById('browser-capture-canvas');
@@ -173,7 +175,6 @@
                     if (ingestWS.readyState === 1) {
                         canvas.width = 640; canvas.height = 480;
                         canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
-                        // Send as Binary Blob (Much more stable than Base64)
                         canvas.toBlob((blob) => {
                             if (ingestWS && ingestWS.readyState === 1) ingestWS.send(blob);
                         }, 'image/jpeg', 0.5);
@@ -191,7 +192,8 @@
 
         function setupTelemetry() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${protocol}//${location.host}/ws`);
+            // UPDATED: Point to the new standardized output metadata endpoint
+            const ws = new WebSocket(`${protocol}//${location.host}/api/output/ws`);
             ws.onopen = () => document.getElementById('ws-indicator').style.background = 'var(--success)';
             ws.onclose = () => {
                 document.getElementById('ws-indicator').style.background = 'var(--danger)';
@@ -200,15 +202,12 @@
             ws.onmessage = (e) => window.dispatchEvent(new CustomEvent('telemetryUpdate', { detail: JSON.parse(e.data) }));
         }
 
-        // Global stream watchdog: Re-source video if it hangs
         function startWatchdog() {
-            const feed = document.querySelector('img[src="/video_feed"]');
+            const feed = document.querySelector('img.live-feed');
             if (feed) {
                 setInterval(() => {
-                    // Slight source change to force refresh if it stalls
                     const url = new URL(feed.src, location.href);
                     url.searchParams.set('t', Date.now());
-                    // We don't actually change the src unless we detect a stall
                 }, 5000);
             }
         }

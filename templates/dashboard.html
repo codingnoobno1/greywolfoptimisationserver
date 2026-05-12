@@ -1,161 +1,219 @@
 {% extends "base.html" %}
 
-{% block title %}Greywolf AI | Debug Console{% endblock %}
+{% block title %}Greywolf AI | Command Center{% endblock %}
 
 {% block extra_css %}
 <style>
-    .app-grid {
+    .dashboard-container {
         display: grid;
-        grid-template-columns: 1fr 400px;
-        gap: 20px;
-        padding: 20px;
-        flex: 1;
-        overflow: hidden;
+        grid-template-columns: 1fr 380px;
+        grid-template-rows: auto 1fr;
+        gap: 25px;
+        height: 100%;
+        max-height: calc(100vh - 120px);
     }
 
-    .viewport {
-        background: var(--panel);
+    /* Main Viewport */
+    .main-viewport {
+        grid-row: span 2;
+        background: #000;
+        border-radius: 24px;
         border: 1px solid var(--border);
-        border-radius: 16px;
         position: relative;
+        overflow: hidden;
         display: flex;
         flex-direction: column;
-        overflow: hidden;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
     }
 
     .viewport-header {
-        padding: 10px 20px;
-        background: rgba(255,255,255,0.02);
+        padding: 15px 25px;
+        background: rgba(255,255,255,0.03);
         border-bottom: 1px solid var(--border);
-        font-size: 0.8rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .status-tag {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 4px 12px;
+        border-radius: 20px;
+        background: rgba(88, 166, 255, 0.1);
+        color: var(--accent);
         text-transform: uppercase;
         letter-spacing: 1px;
     }
 
-    .stream-container {
+    .stream-wrapper {
         flex: 1;
-        background: #000;
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
-        position: relative;
+        background: radial-gradient(circle at center, #0a0c10 0%, #000 100%);
     }
 
-    .stream-container img {
+    .live-feed {
         max-width: 100%;
         max-height: 100%;
         object-fit: contain;
+        transition: transform 0.3s;
     }
 
+    /* Sidebar Widgets */
     .sidebar {
         display: flex;
         flex-direction: column;
         gap: 20px;
         overflow-y: auto;
+        padding-right: 5px;
     }
 
-    .widget {
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+    .control-card {
         background: var(--panel);
         border: 1px solid var(--border);
-        border-radius: 16px;
+        border-radius: 20px;
         padding: 20px;
     }
 
-    .widget h3 {
+    .control-card h3 {
         margin: 0 0 15px 0;
-        font-size: 0.9rem;
-        color: var(--text-bold);
-        text-transform: uppercase;
-    }
-
-    .mode-btn {
-        width: 100%;
-        padding: 12px;
-        margin-bottom: 10px;
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        background: #21262d;
-        color: var(--text);
-        cursor: pointer;
-        text-align: left;
-        transition: all 0.2s;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--text-bright);
         display: flex;
-        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        text-transform: uppercase;
+        opacity: 0.7;
     }
 
-    .mode-btn:hover { background: #30363d; }
-    .mode-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(59,130,246,0.05); }
-
-    .telemetry-log {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.75rem;
-        background: #000;
-        padding: 15px;
-        border-radius: 10px;
-        height: 250px;
-        overflow-y: auto;
-        color: #8b949e;
-        border: 1px solid var(--border);
-    }
-
-    .health-grid {
+    .grid-btns {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 10px;
     }
 
-    .health-box {
-        background: rgba(255,255,255,0.02);
-        padding: 10px;
-        border-radius: 8px;
+    .action-btn {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 12px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
         text-align: center;
     }
 
-    .health-label { font-size: 0.7rem; opacity: 0.6; display: block; }
-    .health-value { font-weight: 700; font-size: 1.1rem; color: var(--text-bold); }
+    .action-btn:hover { background: rgba(255,255,255,0.08); border-color: var(--text); }
+    .action-btn.active { 
+        background: rgba(88, 166, 255, 0.1); 
+        border-color: var(--accent); 
+        color: var(--accent);
+        box-shadow: 0 0 15px rgba(88, 166, 255, 0.1);
+    }
+
+    .full-width { grid-column: span 2; }
+
+    /* Health Stats */
+    .stats-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+
+    .stat-box {
+        background: rgba(255,255,255,0.02);
+        padding: 15px;
+        border-radius: 15px;
+        border: 1px solid var(--border);
+    }
+
+    .stat-label { font-size: 0.65rem; text-transform: uppercase; opacity: 0.5; display: block; margin-bottom: 5px; }
+    .stat-value { font-size: 1.4rem; font-weight: 800; color: var(--text-bright); font-family: 'JetBrains Mono', monospace; }
+
+    /* JSON Log */
+    .log-viewer {
+        background: #000;
+        border-radius: 15px;
+        padding: 15px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.7rem;
+        color: #58a6ff;
+        height: 200px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        white-space: pre-wrap;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="app-grid">
-    <section class="viewport">
-        <div class="viewport-header">Live Telemetry Viewport</div>
-        <div class="stream-container">
-            <img src="/video_feed" alt="Camera Feed">
+<div class="dashboard-container">
+    <div class="main-viewport">
+        <div class="viewport-header">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span id="active-source-tag" class="status-tag">SOURCE: UNKNOWN</span>
+                <span id="active-mode-tag" class="status-tag" style="background: rgba(188, 140, 255, 0.1); color: var(--purple);">MODE: STANDBY</span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <i class="fas fa-expand-alt" style="cursor: pointer; opacity: 0.5;"></i>
+            </div>
         </div>
-    </section>
+        <div class="stream-wrapper">
+            <img id="main-feed" src="/api/output/stream" class="live-feed" alt="Standardized Video Feed">
+        </div>
+    </div>
 
     <aside class="sidebar">
-        <div class="widget">
-            <h3>Engine Control</h3>
-            <button id="btn-none" class="mode-btn active" onclick="updateMode('none')">
-                RAW FEED <span>&rarr;</span>
-            </button>
-            <button id="btn-yolo" class="mode-btn" onclick="updateMode('yolo')">
-                YOLO v8 <span>&rarr;</span>
-            </button>
-            <button id="btn-mediapipe" class="mode-btn" onclick="updateMode('mediapipe')">
-                MEDIAPIPE <span>&rarr;</span>
-            </button>
+        <!-- Input Source Control -->
+        <div class="control-card">
+            <h3><i class="fas fa-video"></i> Input Source</h3>
+            <div class="grid-btns">
+                <button class="action-btn source-btn" data-source="webcam" onclick="setSource('webcam')">WEBCAM</button>
+                <button class="action-btn source-btn" data-source="mqtt" onclick="setSource('mqtt')">ESP32 (IoT)</button>
+                <button class="action-btn source-btn full-width" data-source="mobile" onclick="setSource('mobile')">MOBILE / BROWSER</button>
+                <button class="action-btn source-btn full-width" data-source="none" onclick="setSource('none')">DISABLE INPUT</button>
+            </div>
         </div>
 
-        <div class="widget">
-            <h3>Health Metrics</h3>
-            <div class="health-grid">
-                <div class="health-box">
-                    <span class="health-label">FPS</span>
-                    <span class="health-value" id="fps-val">0.0</span>
+        <!-- AI Mode Control -->
+        <div class="control-card">
+            <h3><i class="fas fa-brain"></i> AI Processing</h3>
+            <div class="grid-btns">
+                <button class="action-btn mode-btn" data-mode="yolo" onclick="setMode('yolo')">YOLO v8</button>
+                <button class="action-btn mode-btn" data-mode="mediapipe" onclick="setMode('mediapipe')">GESTURES</button>
+                <button class="action-btn mode-btn full-width" data-mode="all" onclick="setMode('all')">DUAL AI ENGINE</button>
+                <button class="action-btn mode-btn full-width" data-mode="none" onclick="setMode('none')">RAW FEED (OFF)</button>
+            </div>
+        </div>
+
+        <!-- Real-time Stats -->
+        <div class="control-card">
+            <h3><i class="fas fa-heartbeat"></i> Performance</h3>
+            <div class="stats-row">
+                <div class="stat-box">
+                    <span class="stat-label">System FPS</span>
+                    <span class="stat-value" id="val-fps">0.0</span>
                 </div>
-                <div class="health-box">
-                    <span class="health-label">QUEUE</span>
-                    <span class="health-value" id="queue-val">0</span>
+                <div class="stat-box">
+                    <span class="stat-label">Buffer</span>
+                    <span class="stat-value" id="val-queue">0</span>
                 </div>
             </div>
         </div>
 
-        <div class="widget" style="flex: 1; display: flex; flex-direction: column;">
-            <h3>Telemetry Log</h3>
-            <pre class="telemetry-log" id="telemetry-log">{}</pre>
+        <!-- Raw Telemetry -->
+        <div class="control-card" style="flex: 1; display: flex; flex-direction: column;">
+            <h3><i class="fas fa-code"></i> Metadata stream</h3>
+            <div id="json-log" class="log-viewer">{}</div>
         </div>
     </aside>
 </div>
@@ -163,54 +221,67 @@
 
 {% block extra_js %}
 <script>
-    async function updateMode(mode) {
+    const initialMode = "{{ initial_mode | default('none') }}";
+
+    async function setSource(source) {
         try {
-            await fetch('/api/v1/greywolf/toggle?enabled=false', {method: 'POST'});
-            await fetch('/api/v1/handgesture/toggle?enabled=false', {method: 'POST'});
-            
-            if (mode !== 'none') {
-                const route = mode === 'yolo' ? 'greywolf' : 'handgesture';
-                await fetch(`/api/v1/${route}/toggle?enabled=true`, {method: 'POST'});
-            }
-            
-            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(`btn-${mode}`).classList.add('active');
-        } catch (e) {
-            console.error('Mode switch failed', e);
-        }
-    }
-
-    function setupWS() {
-        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${protocol}//${location.host}/ws`);
-
-        ws.onopen = () => {
-            document.getElementById('ws-indicator').classList.add('active');
-            document.getElementById('ws-status').innerText = 'CONNECTED';
-        };
-
-        ws.onclose = () => {
-            document.getElementById('ws-indicator').classList.remove('active');
-            document.getElementById('ws-status').innerText = 'RECONNECTING...';
-            setTimeout(setupWS, 2000);
-        };
-
-        ws.onmessage = (evt) => {
-            const data = JSON.parse(evt.data);
-            if (data.fps) document.getElementById('fps-val').innerText = data.fps.toFixed(1);
-            document.getElementById('telemetry-log').innerText = JSON.stringify(data, null, 2);
-        };
-    }
-
-    async function pollHealth() {
-        try {
-            const res = await fetch('/api/v1/health');
+            const res = await fetch('/api/input/source', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({source})
+            });
             const data = await res.json();
-            document.getElementById('queue-val').innerText = data.queue_size;
+            updateUIState();
+        } catch (e) { console.error("Source switch failed", e); }
+    }
+
+    async function setMode(mode) {
+        try {
+            const res = await fetch('/api/output/mode', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode})
+            });
+            const data = await res.json();
+            updateUIState();
+        } catch (e) { console.error("Mode switch failed", e); }
+    }
+
+    async function updateUIState() {
+        try {
+            const res = await fetch('/api/system/health');
+            const data = await res.json();
+            
+            // Update Source Buttons
+            document.querySelectorAll('.source-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.source === data.active_source);
+            });
+            document.getElementById('active-source-tag').innerText = `SOURCE: ${data.active_source.toUpperCase()}`;
+
+            // Update Mode Buttons
+            document.querySelectorAll('.mode-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.mode === data.active_mode);
+            });
+            document.getElementById('active-mode-tag').innerText = `MODE: ${data.active_mode.toUpperCase()}`;
+            
+            document.getElementById('val-queue').innerText = data.performance.queue_size;
         } catch (e) {}
     }
 
-    setupWS();
-    setInterval(pollHealth, 2000);
+    // Handle incoming telemetry from base.html WebSocket
+    window.addEventListener('telemetryUpdate', (e) => {
+        const data = e.detail;
+        document.getElementById('val-fps').innerText = data.fps.toFixed(1);
+        document.getElementById('json-log').innerText = JSON.stringify(data, null, 2);
+        
+        // Auto-scroll log
+        const log = document.getElementById('json-log');
+        log.scrollTop = log.scrollHeight;
+    });
+
+    // Initialize
+    if (initialMode !== 'none') setMode(initialMode);
+    updateUIState();
+    setInterval(updateUIState, 3000);
 </script>
 {% endblock %}
