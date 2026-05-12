@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Greywolf AI | Next-Gen Computer Vision{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 5rem 0;
+    }
+
+    .hero-section h1 {
+        font-size: 4rem;
+        font-weight: 900;
+        margin: 0;
+        background: linear-gradient(135deg, #fff 0%, #8b949e 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -2px;
+    }
+
+    .hero-section p {
+        font-size: 1.25rem;
+        max-width: 700px;
+        margin: 1.5rem 0 3rem 0;
+        line-height: 1.6;
+        color: var(--text);
+    }
+
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2rem;
+    }
+
+    .feature-card {
+        padding: 2.5rem;
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        cursor: pointer;
+        text-decoration: none;
+    }
+
+    .feature-card:hover {
+        background: rgba(88, 166, 255, 0.05);
+        border-color: var(--accent);
+        transform: translateY(-10px);
+    }
+
+    .icon-box {
+        width: 60px;
+        height: 60px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        color: var(--accent);
+        margin-bottom: 2rem;
+        border: 1px solid var(--glass-border);
+    }
+
+    .feature-card h3 {
+        color: var(--text-bright);
+        margin: 0 0 1rem 0;
+        font-size: 1.4rem;
+    }
+
+    .feature-card p {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+
+    .stats-strip {
+        margin-top: 5rem;
+        display: flex;
+        gap: 4rem;
+        opacity: 0.5;
+    }
+
+    .stat-val { font-family: 'JetBrains Mono', monospace; color: var(--text-bright); font-weight: 700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+    <h1>THE FUTURE OF EDGE AI</h1>
+    <p>A decoupled, high-concurrency orchestration engine for real-time computer vision. Scalable, modular, and designed for 10x performance.</p>
+    
+    <div style="display: flex; gap: 20px;">
+        <a href="/yolo" class="btn-premium" style="padding: 15px 35px; background: var(--accent); color: #000; border: none;">EXPLORE VISION</a>
+        <a href="/mediapipe" class="btn-premium" style="padding: 15px 35px;">GESTURE CONTROL</a>
+    </div>
+
+    <div class="stats-strip">
+        <div><span class="stat-val">0.05s</span> LATENCY</div>
+        <div><span class="stat-val">MQTT</span> PROTOCOL</div>
+        <div><span class="stat-val">100%</span> ASYNC</div>
+    </div>
+</div>
+
+<div class="feature-grid">
+    <a href="/yolo" class="glass-card feature-card">
+        <div class="icon-box"><i class="fas fa-eye"></i></div>
+        <h3>Object Detection</h3>
+        <p>Industrial-grade YOLO v8 integration. Real-time bounding boxes and classification with optimized worker threads.</p>
+    </a>
+
+    <a href="/mediapipe" class="glass-card feature-card">
+        <div class="icon-box"><i class="fas fa-hand-pointer"></i></div>
+        <h3>Gesture Logic</h3>
+        <p>Sophisticated hand landmarking for device control. Program index and middle finger triggers for IoT switches.</p>
+    </a>
+
+    <a href="/settings" class="glass-card feature-card">
+        <div class="icon-box"><i class="fas fa-project-diagram"></i></div>
+        <h3>Multi-Pipe Ingest</h3>
+        <p>Switch between ESP32-CAM, local USB webcams, or browser-side capture seamlessly from one interface.</p>
+    </a>
+</div>
+{% endblock %}

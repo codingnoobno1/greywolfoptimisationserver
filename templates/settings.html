@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Greywolf AI | System Configuration{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto;">
+    <h1 style="font-size: 3rem; font-weight: 800; color: var(--text-bright); margin-bottom: 3rem;">System Configuration</h1>
+    
+    <div class="glass-card" style="margin-bottom: 2rem; padding: 2rem;">
+        <h3 style="color: var(--accent); margin-bottom: 1.5rem;"><i class="fas fa-microchip"></i> Processing Architecture</h3>
+        <p style="line-height: 1.8;">The Greywolf platform utilizes a decoupled, asynchronous pipeline for high-performance AI inference.</p>
+        
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-top: 2rem;">
+            <div class="glass-card" style="padding: 1.5rem; border-color: rgba(255,255,255,0.05);">
+                <div style="color: var(--purple); font-weight: 700; margin-bottom: 10px;">WORKER THREADS</div>
+                <div style="font-size: 1.5rem; color: var(--text-bright); font-family: 'JetBrains Mono';">2 ACTIVE</div>
+            </div>
+            <div class="glass-card" style="padding: 1.5rem; border-color: rgba(255,255,255,0.05);">
+                <div style="color: var(--success); font-weight: 700; margin-bottom: 10px;">QUEUE STATUS</div>
+                <div style="font-size: 1.5rem; color: var(--text-bright); font-family: 'JetBrains Mono';">HEALTHY</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card" style="padding: 2rem;">
+        <h3 style="color: var(--purple); margin-bottom: 1.5rem;"><i class="fas fa-network-wired"></i> MQTT Broker</h3>
+        <p>Current Connection: <span id="mqtt-status" style="color: var(--danger); font-weight: bold; font-family: 'JetBrains Mono';">OFFLINE</span></p>
+        <p style="font-size: 0.9rem; opacity: 0.6; margin-top: 1rem;">If you are using an ESP32-CAM, ensure your local Mosquitto broker is running on port 1883.</p>
+        
+        <div style="margin-top: 2rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid var(--border);">
+            <code style="color: var(--accent);">mosquitto -v</code>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // In a real app, we would poll an endpoint for true MQTT status.
+</script>
+{% endblock %}

@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Greywolf AI | Vision Lab{% endblock %}
+
+{% block extra_css %}
+<style>
+    .vision-layout {
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 2rem;
+        height: 100%;
+    }
+
+    .main-viewport {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .video-card {
+        flex: 1;
+        background: #000;
+        border-radius: 24px;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--glass-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .video-card img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+    .overlay-status {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        padding: 8px 16px;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(8px);
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--accent);
+        border: 1px solid var(--glass-border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .sidebar { display: flex; flex-direction: column; gap: 1.5rem; }
+
+    .stat-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--border);
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row span:first-child { font-size: 0.9rem; opacity: 0.7; }
+    .stat-row span:last-child { font-weight: 700; color: var(--text-bright); font-family: 'JetBrains Mono'; }
+
+    .detection-log {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+
+    .det-pill {
+        background: rgba(88, 166, 255, 0.1);
+        border: 1px solid rgba(88, 166, 255, 0.2);
+        padding: 10px 15px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="vision-layout">
+    <div class="main-viewport">
+        <div class="video-card">
+            <img src="/video_feed" id="vision-feed">
+            <div class="overlay-status">
+                <i class="fas fa-circle online"></i> YOLO v8 ENGINE ACTIVE
+            </div>
+        </div>
+    </div>
+
+    <aside class="sidebar">
+        <div class="glass-card" style="flex: 1; display: flex; flex-direction: column;">
+            <h3>Live Detections</h3>
+            <div class="detection-log" id="det-log">
+                <p style="opacity: 0.4;">Scanning environment...</p>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <h3>Telemetry</h3>
+            <div class="stat-row">
+                <span>Inference FPS</span>
+                <span id="fps-val">0.0</span>
+            </div>
+            <div class="stat-row">
+                <span>Active Model</span>
+                <span style="color: var(--accent);">YOLO v8n</span>
+            </div>
+        </div>
+
+        <button onclick="toggleEngine()" id="engine-toggle" class="btn-premium active" style="width: 100%; justify-content: center; padding: 15px;">
+            DISABLE VISION ENGINE
+        </button>
+    </aside>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let engineActive = true;
+
+    async function toggleEngine() {
+        engineActive = !engineActive;
+        await fetch(`/api/v1/greywolf/toggle?enabled=${engineActive}`, {method: 'POST'});
+        const btn = document.getElementById('engine-toggle');
+        btn.innerHTML = engineActive ? 'DISABLE VISION ENGINE' : 'ENABLE VISION ENGINE';
+        btn.className = engineActive ? 'btn-premium active' : 'btn-premium';
+    }
+
+    window.addEventListener('telemetryUpdate', (e) => {
+        const data = e.detail;
+        if (data.fps) document.getElementById('fps-val').innerText = data.fps.toFixed(1);
+        
+        const log = document.getElementById('det-log');
+        if (data.detections && data.detections.length > 0) {
+            log.innerHTML = data.detections.map(d => `
+                <div class="det-pill">
+                    <span>${d.label.toUpperCase()}</span>
+                    <span style="color: var(--accent); font-size: 0.8rem;">${(d.confidence * 100).toFixed(0)}%</span>
+                </div>
+            `).join('');
+        } else {
+            log.innerHTML = '<p style="opacity: 0.4; text-align: center; margin-top: 2rem;">No objects in view</p>';
+        }
+    });
+
+    // Auto-enable on enter
+    fetch('/api/v1/greywolf/toggle?enabled=true', {method: 'POST'});
+    fetch('/api/v1/handgesture/toggle?enabled=false', {method: 'POST'});
+</script>
+{% endblock %}
