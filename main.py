@@ -19,9 +19,8 @@ from workers.ai_worker import start_workers
 # Standardized Routers
 from api.v1.mobile import router as mobile_router
 from api.v1.iot import router as iot_router
-from api.v1.output import router as output_router
+from api.v1.web import router as web_router
 from api.v1.system import router as system_router
-from api.v1.control import router as control_router
 from api.v1.webrtc import router as webrtc_router
 
 @asynccontextmanager
