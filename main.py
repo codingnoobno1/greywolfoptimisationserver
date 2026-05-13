@@ -36,11 +36,12 @@ async def lifespan(app: FastAPI):
     else:
         mqtt_client.start()
     
-    db.log_event('SYSTEM', 'Platform Started - Standardized Architecture Active')
+    db.log_event('SYSTEM', 'Platform Started — SQLite + UUID device_id architecture active')
     
     yield
     
     logger.info('Shutting down...')
+    db.log_event('SYSTEM', 'Platform shutdown')
     mqtt_client.stop()
     webcam_service.stop()
 
