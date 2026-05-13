@@ -41,11 +41,15 @@ class ResultStore:
             if source_id not in self._sources:
                 return None
             res = self._sources[source_id]
-            # FIX: Explicit None check to avoid NumPy truth value ambiguity crash
+            # Explicit None check avoids NumPy truth value ambiguity
             frame = res.get('annotated_frame')
             if frame is None:
                 frame = res.get('frame')
-            return frame
+            # CRITICAL: return a copy, not the original array reference.
+            # Without .copy(), the AI worker can overwrite this buffer while
+            # the feed endpoint is mid-imencode → torn frames → stripe artifacts.
+            return frame.copy() if frame is not None else None
+
 
     def set_active_mode(self, source_id: str, mode: str):
         with self._lock:
