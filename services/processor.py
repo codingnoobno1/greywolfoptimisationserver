@@ -32,6 +32,28 @@ from services.mqtt_client import mqtt_client
 from core.logger import logger
 from core.models import FramePacket
 
+# ── MQTT gesture event publisher ──────────────────────────────────────────────
+
+_SWITCH_MAP = {
+    "Switch 1": "S1",
+    "Switch 2": "S2",
+    "Switch 3": "S3",
+    "Switch 4": "S4",
+    "Switch 5": "S5",
+}
+
+def _mqtt_publish_gesture(gesture: str, source_id: str) -> None:
+    """Publish a confirmed gesture event to the MQTT broker."""
+    if gesture in _SWITCH_MAP:
+        tag = _SWITCH_MAP[gesture]
+        mqtt_client.publish("greywolf/status/event",
+                            f"G_DETECTED_{tag}_{source_id}")
+    elif gesture == "Regulator":
+        # Flutter handles mode cycling; server just signals the event.
+        mqtt_client.publish("greywolf/gesture/regulator",
+                            f"CYCLE_{source_id}")
+
+
 # ── Stability parameters ───────────────────────────────────────────────────────
 # A gesture must appear in this many consecutive frames before being "confirmed".
 # At ~7 fps processing: 3 frames ≈ 430 ms hold time. Adjust if needed.
@@ -145,13 +167,8 @@ def process_frame(packet: FramePacket):
                     db.log_event("GESTURE",
                                  f"[{packet.source_id}] {confirmed} CONFIRMED")
 
-                    # MQTT: server-side publish (matches existing topic schema)
-                    if confirmed == "Switch 1":
-                        mqtt_client.publish("greywolf/status/event",
-                                            f"G_DETECTED_S1_{packet.source_id}")
-                    elif confirmed == "Switch 2":
-                        mqtt_client.publish("greywolf/status/event",
-                                            f"G_DETECTED_S2_{packet.source_id}")
+                    # MQTT: standardised command schema
+                    _mqtt_publish_gesture(confirmed, packet.source_id)
 
             # Store the raw gestures for telemetry display (hand position, etc.)
             # but mark which ones are confirmed so Flutter can decide.
