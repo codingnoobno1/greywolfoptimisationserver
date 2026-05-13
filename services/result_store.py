@@ -59,4 +59,10 @@ class ResultStore:
         with self._lock:
             return list(self._sources.keys())
 
+    def remove_source(self, source_id: str):
+        """Deregister a source on disconnect — prevents ghost entries in the store."""
+        with self._lock:
+            self._sources.pop(source_id, None)
+            self._active_modes.pop(source_id, None)
+
 store = ResultStore()
