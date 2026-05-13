@@ -196,3 +196,65 @@ async def mobile_video_stream(device_id: str):
         web_mjpeg_generator(device_id),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Binary Video Feed WebSocket  (Server → Flutter output stream)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.websocket("/feed/{device_id}")
+async def mobile_video_feed(websocket: WebSocket, device_id: str):
+    """
+    Pushes AI-annotated JPEG frames back to Flutter over WebSocket.
+
+    Why not WebRTC:
+      WebRTC requires STUN/TURN for NAT traversal.
+      Mobile carrier symmetric NAT blocks ICE → connection always fails.
+      This WebSocket uses the exact same TLS connection path that already works
+      for frame ingestion — zero additional NAT issues.
+
+    Protocol:
+      Server → Client : raw JPEG bytes (binary)
+      Target: 15 FPS (67ms interval) — enough for gesture display, low bandwidth
+
+    Flutter side:
+      Receive bytes → Image.memory(bytes) → display in widget
+    """
+    await websocket.accept()
+    logger.info(f"[FEED] Video feed connected: device={device_id}")
+
+    frame_interval = 1.0 / settings.FPS_LIMIT  # respects global FPS cap
+    empty_frame_cache: bytes | None = None      # cache the waiting frame
+
+    try:
+        while True:
+            loop_start = asyncio.get_event_loop().time()
+
+            img = store.get_latest_frame(device_id)
+
+            if img is not None:
+                _, encoded = cv2.imencode(
+                    ".jpg", img,
+                    [int(cv2.IMWRITE_JPEG_QUALITY), settings.JPEG_QUALITY]
+                )
+                await websocket.send_bytes(bytes(encoded))
+            else:
+                # Send a placeholder frame if AI hasn't produced output yet
+                if empty_frame_cache is None:
+                    placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+                    cv2.putText(
+                        placeholder, f"AI WARMING UP...", (140, 240),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (80, 80, 80), 2
+                    )
+                    _, enc = cv2.imencode(".jpg", placeholder, [cv2.IMWRITE_JPEG_QUALITY, 50])
+                    empty_frame_cache = bytes(enc)
+                await websocket.send_bytes(empty_frame_cache)
+
+            elapsed = asyncio.get_event_loop().time() - loop_start
+            await asyncio.sleep(max(0.0, frame_interval - elapsed))
+
+    except WebSocketDisconnect:
+        logger.info(f"[FEED] Video feed disconnected: device={device_id}")
+    except Exception as e:
+        logger.error(f"[FEED] Error for {device_id}: {e}")
+
