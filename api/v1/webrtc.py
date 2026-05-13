@@ -1,148 +1,140 @@
+"""
+Greywolf WebRTC Output API.
+
+Architecture:
+  INPUT  path: Flutter → binary WebSocket → push_frame() → AI    (NOT handled here)
+  OUTPUT path: ResultStore → VideoProcessedTrack → WebRTC → Flutter RTCVideoView
+
+Flutter sends a receive-only offer (no video tracks added from Flutter side).
+Server responds with an answer that contains the AI-processed video track.
+
+Critical fix:
+  _pcs dict keeps RTCPeerConnection objects alive.
+  Old code had `pc` as a local variable → Python GC destroyed it after the
+  route returned → connection died within 20-30 seconds.
+"""
 import asyncio
-import json
-import os
 import cv2
 import numpy as np
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
-from aiortc.contrib.media import MediaRelay
 
-from services.frame_queue import push_frame
 from services.result_store import store
-from core.models import FramePacket
 from core.logger import logger
 from config.settings import settings
 
 router = APIRouter()
-relay = MediaRelay()
 
-from av import VideoFrame
+# ── PC registry ───────────────────────────────────────────────────────────────
+# Keeps PeerConnection objects alive (prevents Python GC from destroying them).
+# Key: source_id (device UUID)  Value: RTCPeerConnection
+_pcs: dict[str, RTCPeerConnection] = {}
 
-async def _consume_ingest(track, source_id):
-    """Asynchronously consume frames from an inbound track"""
-    logger.info(f"WebRTC Ingest: Starting frame consumer for {source_id}")
-    # 1. Immediate registration so the source appears in the dashboard list instantly
-    store.update_result(source_id, {"status": "streaming"})
-    
-    count = 0
-    try:
-        while True:
-            frame = await track.recv()
-            img = frame.to_ndarray(format="bgr24")
-            
-            # 2. Push to AI processing queue
-            packet = FramePacket(
-                frame=img,
-                source_id=source_id,
-                source_type="mobile_webrtc",
-                fps=settings.MOBILE_FPS,
-                quality=settings.MOBILE_JPEG_QUALITY
-            )
-            push_frame(packet)
-            
-            count += 1
-            if count % 100 == 0:
-                logger.debug(f"WebRTC Ingest [{source_id}]: Received {count} frames")
-    except Exception as e:
-        logger.error(f"WebRTC Ingest Error for {source_id}: {e}")
 
-class VideoIngestTrack(VideoStreamTrack):
-    """
-    A video stream track that receives frames from WebRTC 
-    and pushes them into the AI processing pipeline.
-    """
-    def __init__(self, track, client_id):
-        super().__init__()
-        self.track = track
-        self.client_id = client_id
-
-    async def recv(self):
-        frame = await self.track.recv()
-        
-        # Convert aiortc frame to numpy/OpenCV format
-        img = frame.to_ndarray(format="bgr24")
-        
-        # Standardize and Push to AI Pipeline
-        packet = FramePacket(
-            frame=img,
-            source_id=self.client_id,
-            source_type="mobile_webrtc",
-            fps=settings.MOBILE_FPS,
-            quality=settings.MOBILE_JPEG_QUALITY
-        )
-        push_frame(packet)
-        
-        return frame
+# ── Output track ──────────────────────────────────────────────────────────────
 
 class VideoProcessedTrack(VideoStreamTrack):
     """
-    A video stream track that pulls the latest processed frame
-    from the ResultStore and sends it back to the client.
+    Pulls the AI-annotated frame for a device from ResultStore
+    and sends it to the Flutter client via WebRTC at ~20 FPS.
     """
+    kind = "video"
+
     def __init__(self, source_id: str):
         super().__init__()
         self.source_id = source_id
-        self.counter = 0
+        self._pts = 0
 
     async def recv(self):
-        # Limit framerate of processed stream to ~20 FPS to save bandwidth/CPU
-        await asyncio.sleep(0.05) 
-        
-        # Get annotated frame from store for THIS specific source
-        img = store.get_latest_frame(self.source_id)
-        
-        if img is None:
-            # Send a black placeholder if no frame yet
-            img = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(img, f"WAITING FOR {self.source_id}...", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        # ~20 FPS output to save bandwidth
+        await asyncio.sleep(1.0 / 20)
 
-        # Convert numpy BGR to aiortc VideoFrame
+        img = store.get_latest_frame(self.source_id)
+        if img is None:
+            img = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(
+                img, f"WAITING: {self.source_id[:8]}...",
+                (60, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 180, 180), 2
+            )
+
+        from av import VideoFrame
         frame = VideoFrame.from_ndarray(img, format="bgr24")
-        frame.pts = self.counter
-        frame.time_base = 1 / 1000  # ms
-        self.counter += 1
-        
+        frame.pts = self._pts
+        frame.time_base = 1 / 1000
+        self._pts += 50  # 50 ms steps → 20 FPS
         return frame
+
+
+# ── Signaling endpoint ────────────────────────────────────────────────────────
 
 @router.post("/offer/{source_id}")
 async def webrtc_offer(source_id: str, request: Request):
+    """
+    Receive Flutter's SDP offer and return an answer.
+
+    Flutter sends a receive-only offer (no tracks added from the phone).
+    Server adds VideoProcessedTrack and replies with the answer SDP.
+    The processed video then flows Server → Flutter.
+    """
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
+    # ── Close any existing PC for this device ────────────────────────────────
+    if source_id in _pcs:
+        old_pc = _pcs.pop(source_id)
+        try:
+            await old_pc.close()
+            logger.info(f"WebRTC: Closed stale PC for {source_id}")
+        except Exception:
+            pass
+
+    # ── Create new PC and store it ───────────────────────────────────────────
     pc = RTCPeerConnection()
-    
-    # 1. Pre-add the Outbound (AI Feedback) track so it's included in the Answer SDP
+    _pcs[source_id] = pc          # <-- keeps it alive, prevents GC
+
+    # ── Add the AI-processed output track ────────────────────────────────────
     pc.addTrack(VideoProcessedTrack(source_id))
-    
+
+    # ── Lifecycle logging ────────────────────────────────────────────────────
     @pc.on("iceconnectionstatechange")
-    async def on_iceconnectionstatechange():
-        logger.info(f"ICE Connection State [{source_id}]: {pc.iceConnectionState}")
+    async def on_ice():
+        logger.info(f"WebRTC ICE [{source_id}]: {pc.iceConnectionState}")
 
     @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        logger.info(f"Peer Connection State [{source_id}]: {pc.connectionState}")
-        if pc.connectionState in ["failed", "closed"]:
-            await pc.close()
+    async def on_state():
+        state = pc.connectionState
+        logger.info(f"WebRTC PC [{source_id}]: {state}")
+        if state in ("failed", "closed"):
+            _pcs.pop(source_id, None)
+            try:
+                await pc.close()
+            except Exception:
+                pass
 
+    # ── No inbound track expected (Flutter uses binary WS for input) ─────────
+    # If Flutter accidentally sends a track, just ignore it.
     @pc.on("track")
     def on_track(track):
-        if track.kind == "video":
-            logger.info(f"WebRTC: Inbound video track detected for {source_id}")
-            # 2. Handle Ingest: Subscribe to incoming track and push to AI pipeline
-            # We don't need to add this to PC, we just need to consume it
-            asyncio.ensure_future(_consume_ingest(relay.subscribe(track), source_id))
+        logger.debug(f"WebRTC: Unexpected inbound track from {source_id} — ignoring")
 
-    # Set remote description (The Offer from Flutter)
+    # ── SDP exchange ─────────────────────────────────────────────────────────
     await pc.setRemoteDescription(offer)
-
-    # Create local description (The Answer for Flutter)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
-    return JSONResponse(
-        content={
-            "sdp": pc.localDescription.sdp,
-            "type": pc.localDescription.type
-        }
-    )
+    logger.info(f"WebRTC: Answer sent to {source_id} ✅")
+
+    return JSONResponse(content={
+        "sdp": pc.localDescription.sdp,
+        "type": pc.localDescription.type
+    })
+
+
+@router.get("/status")
+async def webrtc_status():
+    """List active WebRTC connections."""
+    return {
+        "active_connections": list(_pcs.keys()),
+        "count": len(_pcs)
+    }
